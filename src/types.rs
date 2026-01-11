@@ -32,4 +32,3 @@ impl From<(f32, f32)> for CurvePoint {
         Self::new(voltage, soc)
     }
 }
-

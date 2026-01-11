@@ -16,8 +16,10 @@ A zero-dependency, `no_std` compatible Rust library for estimating battery state
 ```toml
 [dependencies]
 battery-estimator = "0.1"
+```
 
 ## Quick Start
+
 ```rust
 use battery_estimator::{BatteryChemistry, SocEstimator};
 fn main() {

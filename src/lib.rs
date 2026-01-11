@@ -23,20 +23,21 @@
 #![no_std]
 #![deny(missing_docs, unsafe_code)]
 
-mod error;
-mod types;
-mod curve;
-mod estimator;
 mod compensation;
+mod curve;
+mod error;
+mod estimator;
+mod types;
 
-pub use error::Error;
-pub use types::{BatteryChemistry, CurvePoint};
+pub use compensation::{
+    compensate_aging, compensate_temperature, default_temperature_compensation,
+};
 pub use curve::{Curve, default_curves};
+pub use error::Error;
 pub use estimator::SocEstimator;
-pub use compensation::{compensate_temperature, compensate_aging ,default_temperature_compensation};
+pub use types::{BatteryChemistry, CurvePoint};
 
 /// 重新导出核心类型，方便使用
 pub mod prelude {
     pub use crate::{BatteryChemistry, CurvePoint, Error, SocEstimator};
 }
-
