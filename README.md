@@ -1,6 +1,6 @@
 # Battery SOC Estimator
 
-A zero-dependency, `no_std` compatible Rust library for estimating battery state-of-charge (SOC) from voltage measurements.
+A no_std, zero-dependency library for estimating battery state of charge based on voltage. It includes temperature compensation and aging compensation features.
 
 ## Features
 
