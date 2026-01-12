@@ -1,5 +1,3 @@
-//! 电压曲线实现
-
 use crate::{CurvePoint, Error};
 
 /// 最大曲线点数
@@ -25,41 +23,37 @@ impl Curve {
         }
     }
 
-    /// 创建曲线 - 使用 const 函数
+    /// 创建曲线
     pub const fn new(points: &[CurvePoint]) -> Self {
         let mut curve = Self::empty();
         let mut i = 0;
-
-        // 复制点数据
+    
+        let mut min = 0.0_f32;
+        let mut max = 0.0_f32;
+    
         while i < points.len() && i < MAX_CURVE_POINTS {
-            curve.points[i] = points[i];
+            let p = points[i];
+            curve.points[i] = p;
+    
+            if i == 0 {
+                min = p.voltage;
+                max = p.voltage;
+            } else {
+                if p.voltage < min { min = p.voltage; }
+                if p.voltage > max { max = p.voltage; }
+            }
+    
             i += 1;
         }
+    
         curve.len = i;
-
-        // 计算最小和最大电压（在 const 函数中手动计算）
         if i > 0 {
-            let mut min = points[0].voltage;
-            let mut max = points[0].voltage;
-            let mut j = 1;
-
-            while j < i {
-                let v = points[j].voltage;
-                if v < min {
-                    min = v;
-                }
-                if v > max {
-                    max = v;
-                }
-                j += 1;
-            }
-
             curve.min_voltage = min;
             curve.max_voltage = max;
         }
-
         curve
     }
+    
 
     /// 从电压计算SOC（线性插值）
     pub fn voltage_to_soc(&self, voltage: f32) -> Result<f32, Error> {
@@ -106,11 +100,11 @@ impl Curve {
     }
 }
 
-/// 预定义电池曲线（使用新的 const 构造器）
+/// 预定义电池曲线
 pub mod default_curves {
     use super::*;
 
-    /// 锂聚合物电池曲线（电压从低到高排序！）
+    /// 锂聚合物电池曲线（电压从低到高排序）
     pub const LIPO: Curve = Curve::new(&[
         CurvePoint::new(3.20, 0.0), // 最低电压
         CurvePoint::new(3.30, 5.0),
@@ -151,6 +145,25 @@ pub mod default_curves {
         CurvePoint::new(4.00, 90.0),
         CurvePoint::new(4.10, 95.0),
         CurvePoint::new(4.20, 100.0),
+    ]);
+
+    /// 1S 锂聚合物电池“保守满电/保守亏电”曲线（电压从低到高排序）
+    ///
+    /// - Vbat <= 3.40V：视为 0%，并应触发低电关机（保护电池）
+    /// - Vbat >= 4.10V：视为 100%（不追求 4.20V 才满电）
+    pub const LIPO410_FULL340_CUTOFF: Curve = Curve::new(&[
+        CurvePoint::new(3.40, 0.0),    // 关机阈值=0%
+        CurvePoint::new(3.50, 8.0),
+        CurvePoint::new(3.60, 18.0),
+        CurvePoint::new(3.70, 40.0), 
+        CurvePoint::new(3.75, 52.0),
+        CurvePoint::new(3.80, 65.0),
+        CurvePoint::new(3.85, 78.0),
+        CurvePoint::new(3.90, 88.0),
+        CurvePoint::new(3.95, 94.0),
+        CurvePoint::new(4.00, 97.0),
+        CurvePoint::new(4.05, 99.0),
+        CurvePoint::new(4.10, 100.0),  // 满电阈值
     ]);
 }
 

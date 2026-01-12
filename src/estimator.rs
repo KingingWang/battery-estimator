@@ -1,4 +1,4 @@
-//! SOC估算器主结构（集成温度补偿）
+//! SOC(荷电状态)估算器（集成温度补偿）
 
 use crate::{
     BatteryChemistry, Curve, Error, compensate_aging, compensate_temperature, default_curves,
@@ -23,7 +23,7 @@ pub struct EstimatorConfig {
 }
 
 impl EstimatorConfig {
-    /// 创建默认配置（const函数）
+    /// 默认配置
     pub const fn default() -> Self {
         Self {
             nominal_temperature: 25.0,
@@ -101,6 +101,7 @@ impl SocEstimator {
             BatteryChemistry::LiPo => &default_curves::LIPO,
             BatteryChemistry::LiFePO4 => &default_curves::LIFEPO4,
             BatteryChemistry::LiIon => &default_curves::LIION,
+            BatteryChemistry::Lipo410Full340Cutoff => &default_curves::LIPO410_FULL340_CUTOFF,
         };
 
         Self {
@@ -123,6 +124,7 @@ impl SocEstimator {
             BatteryChemistry::LiPo => &default_curves::LIPO,
             BatteryChemistry::LiFePO4 => &default_curves::LIFEPO4,
             BatteryChemistry::LiIon => &default_curves::LIION,
+            BatteryChemistry::Lipo410Full340Cutoff => &default_curves::LIPO410_FULL340_CUTOFF,
         };
 
         Self { curve, config }

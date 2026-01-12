@@ -9,6 +9,8 @@ pub enum BatteryChemistry {
     LiFePO4,
     /// 锂离子电池 (4.2V 满充, 3.3V 截止)
     LiIon,
+    /// 锂聚合物电池“保守满电/保守亏电”
+    Lipo410Full340Cutoff,
 }
 
 /// 电压-SOC曲线点

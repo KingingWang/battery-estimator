@@ -1,12 +1,12 @@
 [package]
 name = "battery-estimator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A no_std, zero-dependency library for estimating battery SOC from voltage"
 readme = "README.md"
 repository = "https://github.com/KingingWang/battery-estimator"
 license = "MIT"
-keywords = ["battery", "soc", "embedded", "no-std", "voltage"]
+keywords = ["battery", "soc", "no-std", "voltage", "level"]
 categories = ["embedded", "no-std"]
 authors = ["kingingwang@foxmail.com"]
 

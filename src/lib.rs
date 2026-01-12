@@ -1,4 +1,4 @@
-//! # Battery SOC Estimator
+//! # Battery SOC(State of Charge) Estimator
 //!
 //! A zero-dependency, `no_std` compatible library for estimating battery
 //! state-of-charge (SOC) from voltage measurements.
@@ -17,7 +17,7 @@
 //!
 //! let estimator = SocEstimator::new(BatteryChemistry::LiPo);
 //! let soc = estimator.estimate_soc(3.7).unwrap();
-//! println!("SOC: {:.1}%", soc); // ~30%
+//! println!("SOC: {:.1}%", soc); // ~50%
 //! ```
 
 #![no_std]
