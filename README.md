@@ -15,7 +15,7 @@ A no_std, zero-dependency library for estimating battery state of charge based o
 
 ```toml
 [dependencies]
-battery-estimator = "0.1"
+battery-estimator = "0.1.2"
 ```
 
 ## Quick Start
@@ -38,6 +38,7 @@ fn main() {
 - LiPo (4.2V - 3.2V)
 - LiFePO4 (3.65V - 3.0V)
 - Li-Ion (4.2V - 3.3V)
+- Lipo410Full340Cutoff (3.4V - 4.1V)
 
 ## License
 MIT

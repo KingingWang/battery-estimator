@@ -152,18 +152,19 @@ pub mod default_curves {
     /// - Vbat <= 3.40V：视为 0%，并应触发低电关机（保护电池）
     /// - Vbat >= 4.10V：视为 100%（不追求 4.20V 才满电）
     pub const LIPO410_FULL340_CUTOFF: Curve = Curve::new(&[
-        CurvePoint::new(3.40, 0.0),    // 关机阈值=0%
-        CurvePoint::new(3.50, 8.0),
-        CurvePoint::new(3.60, 18.0),
-        CurvePoint::new(3.70, 40.0), 
-        CurvePoint::new(3.75, 52.0),
-        CurvePoint::new(3.80, 65.0),
-        CurvePoint::new(3.85, 78.0),
-        CurvePoint::new(3.90, 88.0),
-        CurvePoint::new(3.95, 94.0),
-        CurvePoint::new(4.00, 97.0),
-        CurvePoint::new(4.05, 99.0),
-        CurvePoint::new(4.10, 100.0),  // 满电阈值
+        CurvePoint::new(3.40,  0.0),   // 关机阈值=0%
+        CurvePoint::new(3.48,  5.0),
+        CurvePoint::new(3.53, 10.0),
+        CurvePoint::new(3.62, 20.0),
+        CurvePoint::new(3.68, 30.0),
+        CurvePoint::new(3.73, 40.0),
+        CurvePoint::new(3.77, 50.0),
+        CurvePoint::new(3.81, 60.0),
+        CurvePoint::new(3.85, 70.0),
+        CurvePoint::new(3.90, 80.0),
+        CurvePoint::new(3.97, 90.0),
+        CurvePoint::new(4.03, 95.0),
+        CurvePoint::new(4.10,100.0),   // 满电阈值
     ]);
 }
 
