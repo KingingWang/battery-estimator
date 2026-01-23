@@ -66,6 +66,8 @@ fn main() {
 }
 ```
 
+**Note**: `estimate_soc_compensated` only applies compensation when the estimator is configured with compensation enabled. Use `with_temperature_compensation()` or `with_all_compensation()` to enable it.
+
 ### Custom Voltage Curve
 
 ```rust
@@ -128,6 +130,8 @@ fn main() {
 }
 ```
 
+**Note**: `estimate_soc_compensated` only applies compensation when the estimator is configured with compensation enabled. Use `with_aging_compensation()` or `with_all_compensation()` to enable it.
+
 ### Combined Compensation
 
 ```rust
@@ -159,8 +163,9 @@ The library is designed for minimal memory usage:
 
 ## Performance
 
-- **Fast estimation**: O(n)
+- **Fast estimation**: O(n) where n is the number of curve points (typically 8-12)
 - **Deterministic execution time**: No dynamic memory allocation
+- **Linear search**: Efficient for typical battery curves with limited points
 
 ## API Documentation
 
@@ -180,6 +185,7 @@ Run examples with:
 ```bash
 cargo run --example basic
 cargo run --example custom_curve
+cargo run --example precise_test
 cargo run --example temperature_compensation_test
 ```
 
