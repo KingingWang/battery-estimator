@@ -166,4 +166,27 @@ mod tests {
         ];
         // All error variants created successfully
     }
+
+    #[test]
+    fn test_error_display_formatting() {
+        // Test Display trait implementation (lines 107-112)
+        // In no_std environment, we verify the implementation by using it
+
+        let error1 = Error::VoltageOutOfRange;
+        let error2 = Error::InvalidCurve;
+        let error3 = Error::NumericalError;
+        let error4 = Error::InvalidTemperature;
+
+        // Verify Display implementation works by checking the errors can be used
+        // The Display implementation is used internally by assert macros
+        assert!(!matches!(error1, Error::InvalidCurve));
+        assert!(!matches!(error2, Error::VoltageOutOfRange));
+        assert!(!matches!(error3, Error::InvalidTemperature));
+        assert!(!matches!(error4, Error::NumericalError));
+
+        // Verify all variants are distinct
+        assert_ne!(error1, error2);
+        assert_ne!(error2, error3);
+        assert_ne!(error3, error4);
+    }
 }

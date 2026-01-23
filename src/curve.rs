@@ -547,6 +547,27 @@ mod tests {
     }
 
     #[test]
+    fn test_curve_with_increasing_voltages() {
+        // Test curve with strictly increasing voltages to cover line 127
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.3, 30.0),
+            CurvePoint::new(3.6, 60.0),
+            CurvePoint::new(3.9, 90.0),
+            CurvePoint::new(4.2, 100.0),
+        ]);
+
+        // Verify max voltage is correctly set
+        let (min, max) = curve.voltage_range();
+        assert_eq!(min, 3.0);
+        assert_eq!(max, 4.2);
+
+        // Test interpolation works
+        let soc = curve.voltage_to_soc(3.45).unwrap();
+        assert!(soc > 40.0 && soc < 50.0);
+    }
+
+    #[test]
     fn test_curve_decimal_voltages() {
         let curve = Curve::new(&[CurvePoint::new(3.15, 0.0), CurvePoint::new(3.85, 100.0)]);
 

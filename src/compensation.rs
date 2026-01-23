@@ -434,4 +434,19 @@ mod tests {
             "Result should be in valid range"
         );
     }
+
+    #[test]
+    fn test_clamp_function() {
+        // Test clamping at upper bound
+        let result = compensate_temperature(50.0, 1000.0, 25.0, 0.0005);
+        assert!(result <= 52.5, "Should be clamped to +5%");
+
+        // Test clamping at lower bound
+        let result = compensate_temperature(50.0, -1000.0, 25.0, 0.0005);
+        assert!(result >= 47.5, "Should be clamped to -5%");
+
+        // Test clamping at exact bounds
+        let result = compensate_temperature(50.0, 125.0, 25.0, 0.0005);
+        assert!(result <= 52.5, "5% increase should be at upper bound");
+    }
 }
