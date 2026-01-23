@@ -1,6 +1,6 @@
-//! 温度补偿测试
+//! Temperature Compensation Test
 //!
-//! 测试不同温度下SOC的变化，展示温度补偿的效果
+//! Tests SOC changes at different temperatures, demonstrating temperature compensation effects
 
 use battery_estimator::{default_temperature_compensation, BatteryChemistry, SocEstimator};
 
@@ -8,21 +8,21 @@ fn main() {
     println!("Battery SOC Estimator - Temperature Compensation Test");
     println!("=====================================================\n");
 
-    // 测试所有电池类型在不同温度下的表现
+    // Test all battery types at different temperatures
     test_all_batteries_with_temperature();
 
-    // 详细展示温度补偿效果
+    // Detailed temperature compensation demonstration
     println!("\n\nDetailed Temperature Compensation Analysis");
     println!("==========================================\n");
     detailed_temperature_analysis();
 
-    // 测试极端温度情况
+    // Test extreme temperature conditions
     println!("\n\nExtreme Temperature Tests");
     println!("========================\n");
     test_extreme_temperatures();
 }
 
-/// 测试所有电池类型在不同温度下的表现
+/// Test all battery types at different temperatures
 fn test_all_batteries_with_temperature() {
     let chemistries = [
         (BatteryChemistry::LiPo, "LiPo", 3.2, 4.2),
@@ -42,7 +42,7 @@ fn test_all_batteries_with_temperature() {
 
         let estimator = SocEstimator::new(*chem);
 
-        // 测试不同温度下的关键电压点
+        // Test key voltage points at different temperatures
         let test_temperatures = [-10.0, 0.0, 25.0, 40.0, 60.0];
         let test_voltages = generate_test_voltages(*min_v, *max_v);
 
@@ -72,27 +72,27 @@ fn test_all_batteries_with_temperature() {
 
         println!();
 
-        // 显示温度对SOC的影响百分比
+        // Show temperature impact on SOC percentage
         show_temperature_impact(*chem, *min_v, *max_v);
         println!();
     }
 }
 
-/// 生成测试电压点
+/// Generate test voltage points
 fn generate_test_voltages(min_v: f32, max_v: f32) -> Vec<f32> {
     let mut voltages = Vec::new();
 
-    // 边界点
+    // Boundary points
     voltages.push(min_v);
     voltages.push(max_v);
 
-    // 中间点（25%，50%，75%）
+    // Midpoints (25%, 50%, 75%)
     let range = max_v - min_v;
     voltages.push(min_v + range * 0.25);
     voltages.push(min_v + range * 0.50);
     voltages.push(min_v + range * 0.75);
 
-    // 特定测试点（每0.1V）
+    // Specific test points (every 0.1V)
     let step = 0.1;
     let mut v = min_v + step;
     while v < max_v {
@@ -105,7 +105,7 @@ fn generate_test_voltages(min_v: f32, max_v: f32) -> Vec<f32> {
     voltages
 }
 
-/// 显示温度对SOC的影响百分比
+/// Show temperature impact on SOC percentage
 fn show_temperature_impact(chemistry: BatteryChemistry, min_v: f32, max_v: f32) {
     let estimator = SocEstimator::new(chemistry);
     let mid_voltage = (min_v + max_v) / 2.0;
@@ -145,11 +145,11 @@ fn show_temperature_impact(chemistry: BatteryChemistry, min_v: f32, max_v: f32) 
     }
 }
 
-/// 详细温度补偿分析
+/// Detailed temperature compensation analysis
 fn detailed_temperature_analysis() {
     let estimator = SocEstimator::new(BatteryChemistry::LiPo);
 
-    // 测试不同电压在不同温度下的变化
+    // Test voltage changes at different temperatures
     let test_voltages = [3.2, 3.5, 3.7, 3.9, 4.2];
     let test_temperatures = [-20.0, 0.0, 25.0, 50.0];
 
@@ -180,7 +180,7 @@ fn detailed_temperature_analysis() {
         }
     }
 
-    // 显示温度系数的影响
+    // Show temperature coefficient effects
     println!("Temperature coefficient explanation:");
     println!("  Default coefficient: 0.0005 (0.05% per °C)");
     println!("  This means for every °C away from 25°C:");
@@ -192,7 +192,7 @@ fn detailed_temperature_analysis() {
 
     for temp in example_temps.iter() {
         let delta_temp = temp - 25.0;
-        let compensation: f32 = delta_temp * 0.0005 * 100.0; // 转换为百分比
+        let compensation: f32 = delta_temp * 0.0005 * 100.0; // Convert to percentage
         let bounded_compensation = compensation.clamp(-5.0, 5.0);
         let final_soc = example_soc * (1.0 - bounded_compensation / 100.0);
 
@@ -207,7 +207,7 @@ fn detailed_temperature_analysis() {
     }
 }
 
-/// 测试极端温度情况
+/// Test extreme temperature conditions
 fn test_extreme_temperatures() {
     let estimator = SocEstimator::new(BatteryChemistry::LiPo);
     let voltage = 3.7;
@@ -252,19 +252,19 @@ fn test_extreme_temperatures() {
         Err(e) => println!("Error: {}", e),
     }
 
-    // 测试补偿边界
+    // Test compensation boundaries
     println!("\nTesting compensation bounds:");
     test_compensation_bounds();
 }
 
-/// 测试补偿边界
+/// Test compensation boundaries
 fn test_compensation_bounds() {
     let estimator = SocEstimator::new(BatteryChemistry::LiPo);
     let voltage = 3.7;
 
     match estimator.estimate_soc(voltage) {
         Ok(base_soc) => {
-            // 测试超过±5%补偿限制的情况
+            // Test cases exceeding ±5% compensation limit
             let test_cases = [
                 (-100.0, "Should be limited to +5%"),
                 (-50.0, "Should be limited to +5%"),

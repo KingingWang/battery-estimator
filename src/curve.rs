@@ -402,11 +402,11 @@ mod tests {
             CurvePoint::new(4.0, 100.0),
         ]);
 
-        // 测试边界
+        // Test boundaries
         assert_eq!(curve.voltage_to_soc(2.9).unwrap(), 0.0); // 低于最小值
         assert_eq!(curve.voltage_to_soc(4.1).unwrap(), 100.0); // 高于最大值
 
-        // 测试中间值
+        // Test intermediate values
         assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
         assert_eq!(curve.voltage_to_soc(3.75).unwrap(), 75.0);
     }
@@ -415,7 +415,7 @@ mod tests {
     fn test_curve_invalid() {
         let curve = Curve::new(&[CurvePoint::new(3.0, 0.0)]);
 
-        // 只有一个点的曲线应该出错
+        // Curve with only one point should error
         assert!(curve.voltage_to_soc(3.5).is_err());
     }
 }

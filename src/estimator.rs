@@ -1,95 +1,95 @@
-//! SOC(荷电状态)估算器（集成温度补偿）
+//! SOC (State of Charge) Estimator with Temperature Compensation
 
 use crate::{
     compensate_aging, compensate_temperature, default_curves, default_temperature_compensation,
     BatteryChemistry, Curve, Error,
 };
 
-/// SOC估算器配置（优化内存布局）
+/// SOC estimator configuration
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct EstimatorConfig {
-    /// 标称温度 (°C)
+    /// Nominal temperature (°C)
     pub nominal_temperature: f32,
-    /// 温度补偿系数 (每°C变化百分比)
+    /// Temperature compensation coefficient (percentage change per °C)
     pub temperature_coefficient: f32,
-    /// 电池年龄 (年)
+    /// Battery age (years)
     pub age_years: f32,
-    /// 老化系数 (每年容量损失百分比)
+    /// Aging factor (capacity loss percentage per year)
     pub aging_factor: f32,
-    /// 补偿标志（位域压缩）
+    /// Compensation flags (bit field compression)
     flags: u8,
 }
 
 impl EstimatorConfig {
-    /// 默认配置
+    /// Default configuration
     #[inline]
     pub const fn default() -> Self {
         Self {
             nominal_temperature: 25.0,
-            temperature_coefficient: 0.0005, // 0.05% 每°C
+            temperature_coefficient: 0.0005, // 0.05% per °C
             age_years: 0.0,
-            aging_factor: 0.02, // 每年2%容量损失
+            aging_factor: 0.02, // 2% capacity loss per year
             flags: 0,
         }
     }
 
-    /// 启用温度补偿
+    /// Enable temperature compensation
     #[inline]
     pub const fn with_temperature_compensation(mut self) -> Self {
         self.flags |= 0x01;
         self
     }
 
-    /// 启用老化补偿
+    /// Enable aging compensation
     #[inline]
     pub const fn with_aging_compensation(mut self) -> Self {
         self.flags |= 0x02;
         self
     }
 
-    /// 设置标称温度
+    /// Set nominal temperature
     #[inline]
     pub const fn with_nominal_temperature(mut self, temp: f32) -> Self {
         self.nominal_temperature = temp;
         self
     }
 
-    /// 设置温度系数
+    /// Set temperature coefficient
     #[inline]
     pub const fn with_temperature_coefficient(mut self, coeff: f32) -> Self {
         self.temperature_coefficient = coeff;
         self
     }
 
-    /// 设置电池年龄
+    /// Set battery age
     #[inline]
     pub const fn with_age_years(mut self, years: f32) -> Self {
         self.age_years = years;
         self
     }
 
-    /// 设置老化系数
+    /// Set aging factor
     #[inline]
     pub const fn with_aging_factor(mut self, factor: f32) -> Self {
         self.aging_factor = factor;
         self
     }
 
-    /// 是否启用温度补偿
+    /// Whether temperature compensation is enabled
     #[inline]
     pub const fn enable_temperature_compensation(self) -> bool {
         (self.flags & 0x01) != 0
     }
 
-    /// 是否启用老化补偿
+    /// Whether aging compensation is enabled
     #[inline]
     pub const fn enable_aging_compensation(self) -> bool {
         (self.flags & 0x02) != 0
     }
 }
 
-// 非const的Default实现
+// Non-const Default implementation
 impl Default for EstimatorConfig {
     #[inline]
     fn default() -> Self {
@@ -97,7 +97,7 @@ impl Default for EstimatorConfig {
     }
 }
 
-/// SOC估算器
+/// SOC estimator
 #[derive(Debug, Clone, Copy)]
 pub struct SocEstimator {
     curve: &'static Curve,
@@ -105,7 +105,7 @@ pub struct SocEstimator {
 }
 
 impl SocEstimator {
-    /// 创建新的SOC估算器（默认配置）
+    /// Create a new SOC estimator (default configuration)
     pub const fn new(chemistry: BatteryChemistry) -> Self {
         let curve = match chemistry {
             BatteryChemistry::LiPo => &default_curves::LIPO,
@@ -120,7 +120,7 @@ impl SocEstimator {
         }
     }
 
-    /// 使用自定义曲线创建估算器
+    /// Create estimator with custom curve
     pub const fn with_custom_curve(curve: &'static Curve) -> Self {
         Self {
             curve,
@@ -128,7 +128,7 @@ impl SocEstimator {
         }
     }
 
-    /// 使用配置创建估算器（const版本）
+    /// Create estimator with configuration (const version)
     pub const fn with_config(chemistry: BatteryChemistry, config: EstimatorConfig) -> Self {
         let curve = match chemistry {
             BatteryChemistry::LiPo => &default_curves::LIPO,
@@ -140,33 +140,33 @@ impl SocEstimator {
         Self { curve, config }
     }
 
-    /// 使用配置创建估算器
+    /// Create estimator with configuration
     pub fn with_config_non_const(chemistry: BatteryChemistry, config: EstimatorConfig) -> Self {
         Self::with_config(chemistry, config)
     }
 
-    /// 估算SOC（不带温度补偿）
+    /// Estimate SOC (without temperature compensation)
     pub fn estimate_soc(&self, voltage: f32) -> Result<f32, Error> {
         self.curve.voltage_to_soc(voltage)
     }
 
-    /// 估算SOC（带温度补偿） - 总是应用温度补偿，不考虑配置
+    /// Estimate SOC (with temperature compensation) - Always applies temperature compensation, ignoring configuration
     pub fn estimate_soc_with_temp(&self, voltage: f32, temperature: f32) -> Result<f32, Error> {
         let base_soc = self.curve.voltage_to_soc(voltage)?;
 
-        // 总是应用温度补偿，使用默认参数
+        // Always apply temperature compensation with default parameters
         let compensated = default_temperature_compensation(base_soc, temperature);
 
         Ok(compensated.clamp(0.0, 100.0))
     }
 
-    /// 估算SOC（使用配置中的设置）
+    /// Estimate SOC (using configuration settings)
     #[inline]
     pub fn estimate_soc_compensated(&self, voltage: f32, temperature: f32) -> Result<f32, Error> {
         let base_soc = self.curve.voltage_to_soc(voltage)?;
         let mut soc = base_soc;
 
-        // 应用温度补偿
+        // Apply temperature compensation
         if EstimatorConfig::enable_temperature_compensation(self.config) {
             soc = compensate_temperature(
                 soc,
@@ -176,33 +176,33 @@ impl SocEstimator {
             );
         }
 
-        // 应用老化补偿
+        // Apply aging compensation
         if EstimatorConfig::enable_aging_compensation(self.config) {
             soc = compensate_aging(soc, self.config.age_years, self.config.aging_factor);
         }
 
-        // 确保SOC在有效范围内
+        // Ensure SOC is within valid range
         Ok(soc.clamp(0.0, 100.0))
     }
 
-    /// 获取电压范围
+    /// Get voltage range
     pub const fn voltage_range(&self) -> (f32, f32) {
         self.curve.voltage_range()
     }
 
-    /// 更新配置
+    /// Update configuration
     #[inline]
     pub fn update_config(&mut self, config: EstimatorConfig) {
         self.config = config;
     }
 
-    /// 获取当前配置
+    /// Get current configuration
     #[inline]
     pub const fn config(&self) -> &EstimatorConfig {
         &self.config
     }
 
-    /// 启用温度补偿
+    /// Enable temperature compensation
     #[inline]
     pub fn enable_temperature_compensation(&mut self, nominal_temp: f32, coefficient: f32) {
         self.config = EstimatorConfig::default()
@@ -211,7 +211,7 @@ impl SocEstimator {
             .with_temperature_coefficient(coefficient);
     }
 
-    /// 启用老化补偿
+    /// Enable aging compensation
     #[inline]
     pub fn enable_aging_compensation(&mut self, age_years: f32, aging_factor: f32) {
         self.config = EstimatorConfig::default()
@@ -220,16 +220,16 @@ impl SocEstimator {
             .with_aging_factor(aging_factor);
     }
 
-    /// 禁用所有补偿
+    /// Disable all compensation
     #[inline]
     pub fn disable_all_compensation(&mut self) {
         self.config = EstimatorConfig::default();
     }
 }
 
-// 为简化使用添加一些便捷构造函数
+// Convenience constructors for simplified usage
 impl SocEstimator {
-    /// 创建带温度补偿的估算器
+    /// Create estimator with temperature compensation
     #[inline]
     pub fn with_temperature_compensation(
         chemistry: BatteryChemistry,
@@ -244,7 +244,7 @@ impl SocEstimator {
         Self::with_config(chemistry, config)
     }
 
-    /// 创建带老化补偿的估算器
+    /// Create estimator with aging compensation
     #[inline]
     pub fn with_aging_compensation(
         chemistry: BatteryChemistry,
@@ -288,11 +288,11 @@ mod tests {
     fn test_estimator_basic() {
         let estimator = SocEstimator::new(BatteryChemistry::LiPo);
 
-        // 测试边界
+        // Test boundaries
         assert!(estimator.estimate_soc(3.2).unwrap().abs() < 1.0);
         assert!(estimator.estimate_soc(4.2).unwrap() > 99.0);
 
-        // 测试典型值
+        // Test typical values
         let soc = estimator.estimate_soc(3.7).unwrap();
         assert!(
             (45.0..=55.0).contains(&soc),
@@ -305,14 +305,14 @@ mod tests {
     fn test_estimator_with_temp() {
         let estimator = SocEstimator::new(BatteryChemistry::LiPo);
 
-        // 测试不同温度
+        // Test different temperatures
         let base_soc = estimator.estimate_soc(3.7).unwrap();
         let cold_soc = estimator.estimate_soc_with_temp(3.7, 0.0).unwrap();
         let hot_soc = estimator.estimate_soc_with_temp(3.7, 50.0).unwrap();
 
-        // 低温应该显示更高的SOC
+        // Low temperature should show higher SOC
         assert!(cold_soc > base_soc, "Cold temp should increase SOC");
-        // 高温应该显示更低的SOC
+        // High temperature should show lower SOC
         assert!(hot_soc < base_soc, "Hot temp should decrease SOC");
     }
 

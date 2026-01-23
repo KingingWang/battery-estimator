@@ -23,7 +23,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-battery-estimator = "0.1.3"
+battery-estimator = "0.1.4"
 ```
 
 ## Quick Start

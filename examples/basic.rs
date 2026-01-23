@@ -1,4 +1,4 @@
-//! 全面测试 - 测试所有电压值，包括小数点后两位
+//! Comprehensive Test - Testing all voltage values including two decimal places
 
 use battery_estimator::{BatteryChemistry, SocEstimator};
 
@@ -6,7 +6,7 @@ fn main() {
     println!("Battery SOC Estimator - Comprehensive Test");
     println!("==========================================\n");
 
-    // 测试所有电池类型
+    // Test all battery types
     test_battery(BatteryChemistry::LiPo, "LiPo", 3.2, 4.2);
     test_battery(BatteryChemistry::LiFePO4, "LiFePO4", 2.5, 3.65);
     test_battery(BatteryChemistry::LiIon, "Li-Ion", 2.5, 4.2);
@@ -17,25 +17,25 @@ fn main() {
         4.1,
     );
 
-    // 测试边界情况
+    // Test boundary cases
     println!("\n\nBoundary Case Tests");
     println!("===================\n");
     test_boundary_cases();
 
-    // 测试错误情况
+    // Test error cases
     println!("\n\nError Case Tests");
     println!("================\n");
     test_error_cases();
 }
 
-/// 测试特定电池类型
+/// Test specific battery type
 fn test_battery(chemistry: BatteryChemistry, name: &str, min_v: f32, max_v: f32) {
     println!("Testing {} Battery ({}V - {}V):", name, min_v, max_v);
     println!("{}", "-".repeat(50));
 
     let estimator = SocEstimator::new(chemistry);
 
-    // 1. 测试关键电压点
+    // 1. Test key voltage points
     println!("\nKey voltage points:");
     let key_voltages = generate_key_voltages(min_v, max_v);
 
@@ -46,16 +46,16 @@ fn test_battery(chemistry: BatteryChemistry, name: &str, min_v: f32, max_v: f32)
         }
     }
 
-    // 2. 密集测试整个范围（步长0.01V）
+    // 2. Dense testing of entire range (step 0.01V)
     println!("\nDense testing (every 0.05V):");
     let mut voltage = min_v;
     let step = 0.05;
 
     while voltage <= max_v + 0.001 {
-        // 添加微小容差
+        // Add small tolerance
         match estimator.estimate_soc(voltage) {
             Ok(soc) => {
-                // 只在SOC变化显著时打印
+                // Only print when SOC changes significantly
                 if should_print(voltage, min_v, max_v, step) {
                     println!("  {:5.2}V -> {:6.2}%", voltage, soc);
                 }
@@ -65,30 +65,30 @@ fn test_battery(chemistry: BatteryChemistry, name: &str, min_v: f32, max_v: f32)
         voltage += step;
     }
 
-    // 3. 测试曲线特征点
+    // 3. Test curve characteristic points
     println!("\nCharacteristic points:");
     test_characteristic_points(&estimator, name);
 
     println!();
 }
 
-/// 生成关键电压点
+/// Generate key voltage points
 fn generate_key_voltages(min_v: f32, max_v: f32) -> Vec<f32> {
     let mut voltages = Vec::new();
 
-    // 边界点
+    // Boundary points
     voltages.push(min_v);
     voltages.push(max_v);
 
-    // 中间点
+    // Midpoint
     let mid = (min_v + max_v) / 2.0;
     voltages.push(mid);
 
-    // 四分位点
+    // Quartile points
     voltages.push(min_v + (max_v - min_v) * 0.25);
     voltages.push(min_v + (max_v - min_v) * 0.75);
 
-    // 特定测试点
+    // Specific test points
     let step = 0.1;
     let mut v = min_v;
     while v <= max_v + 0.001 {
@@ -101,9 +101,9 @@ fn generate_key_voltages(min_v: f32, max_v: f32) -> Vec<f32> {
     voltages
 }
 
-/// 判断是否需要打印（减少输出量）
+/// Determine whether printing is needed
 fn should_print(voltage: f32, min_v: f32, max_v: f32, step: f32) -> bool {
-    // 总是打印边界和特定点
+    // Always print boundaries and specific points
     if (voltage - min_v).abs() < step * 0.5 {
         return true;
     }
@@ -111,16 +111,16 @@ fn should_print(voltage: f32, min_v: f32, max_v: f32, step: f32) -> bool {
         return true;
     }
 
-    // 打印每0.1V的点
+    // Print every 0.1V point
     let tenth = (voltage * 10.0).round() / 10.0;
     (voltage - tenth).abs() < step * 0.5
 }
 
-/// 测试特征点
+/// Test characteristic points
 fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
     match name {
         "LiPo" => {
-            // LiPo 特征电压
+            // LiPo characteristic voltages
             let points = [
                 (3.2, "Discharge cutoff"),
                 (3.7, "Nominal voltage"),
@@ -138,7 +138,7 @@ fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
             }
         }
         "LiFePO4" => {
-            // LiFePO4 特征电压
+            // LiFePO4 characteristic voltages
             let points = [
                 (2.5, "Discharge cutoff"),
                 (3.0, "Low voltage"),
@@ -156,7 +156,7 @@ fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
             }
         }
         "Li-Ion" => {
-            // Li-Ion 特征电压
+            // Li-Ion characteristic voltages
             let points = [
                 (2.5, "Discharge cutoff"),
                 (3.0, "Low voltage"),
@@ -173,7 +173,7 @@ fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
             }
         }
         "LiPo 4.1V/3.4V (Conservative)" => {
-            // LiPo 保守曲线特征电压
+            // LiPo conservative curve characteristic voltages
             let points = [
                 (3.4, "Shutdown cutoff (0%)"),
                 (3.5, "Very low (10%)"),
@@ -195,7 +195,7 @@ fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
     }
 }
 
-/// 测试边界情况
+/// Test boundary cases
 fn test_boundary_cases() {
     let lipo = SocEstimator::new(BatteryChemistry::LiPo);
 
@@ -220,9 +220,9 @@ fn test_boundary_cases() {
     );
 }
 
-/// 测试错误情况
+/// Test error cases
 fn test_error_cases() {
-    // 这里可以测试一些可能出错的情况
+    // Test potential error scenarios here
     println!("Testing with extreme values:");
 
     let lipo = SocEstimator::new(BatteryChemistry::LiPo);

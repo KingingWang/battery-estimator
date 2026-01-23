@@ -157,39 +157,39 @@ mod tests {
 
     #[test]
     fn test_temperature_compensation() {
-        // 室温应该无变化
+        // Room temperature should have no change
         assert_eq!(default_temperature_compensation(50.0, 25.0), 50.0);
 
-        // 低温应该增加SOC
+        // Low temperature should increase SOC
         let cold_compensated = default_temperature_compensation(50.0, 0.0);
         assert!(cold_compensated > 50.0, "Cold should increase SOC");
 
-        // 高温应该减少SOC
+        // High temperature should decrease SOC
         let hot_compensated = default_temperature_compensation(50.0, 50.0);
         assert!(hot_compensated < 50.0, "Hot should decrease SOC");
     }
 
     #[test]
     fn test_temperature_compensation_bounds() {
-        // 测试边界限制（±5%）
+        // Test boundary limits (±5%)
         let extreme_cold = default_temperature_compensation(50.0, -100.0);
         let extreme_hot = default_temperature_compensation(50.0, 150.0);
 
-        // 应该被限制在±5%以内
+        // Should be limited to ±5%
         assert!(extreme_cold <= 50.0 * 1.05);
         assert!(extreme_hot >= 50.0 * 0.95);
     }
 
     #[test]
     fn test_aging_compensation() {
-        // 新电池应该无变化
+        // New battery should have no change
         assert_eq!(compensate_aging(50.0, 0.0, 0.02), 50.0);
 
-        // 老化电池应该减少SOC
+        // Aged battery should decrease SOC
         let aged = compensate_aging(50.0, 5.0, 0.02);
         assert!(aged < 50.0, "Aging should decrease SOC");
 
-        // 测试最大补偿50%
+        // Test maximum 50% compensation
         let very_aged = compensate_aging(50.0, 30.0, 0.02);
         assert!(
             very_aged >= 25.0,

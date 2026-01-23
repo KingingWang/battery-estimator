@@ -1,4 +1,4 @@
-//! 精确测试 - 测试每个0.01V间隔
+//! Precise Test - Testing at 0.01V Intervals
 
 use battery_estimator::{BatteryChemistry, SocEstimator};
 
@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Battery SOC Estimator - Precise Voltage Test");
     println!("============================================\n");
 
-    // 测试所有电池类型
+    // Test all battery types
     let chemistries = [
         (BatteryChemistry::LiPo, "LiPo", 3.2, 4.2),
         (BatteryChemistry::LiFePO4, "LiFePO4", 2.5, 3.65),
@@ -23,24 +23,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Testing {} Battery:", name);
 
         let estimator = SocEstimator::new(*chem);
-        let step = 0.01; // 0.01V 精度
+        let step = 0.01; // 0.01V precision
 
-        // 生成测试电压
+        // Generate test voltages
         let test_count = ((max_v - min_v) / step) as usize + 1;
         println!("  Voltage range: {}V to {}V", min_v, max_v);
         println!("  Step: {}V", step);
         println!("  Total test points: {}", test_count);
 
-        // 执行测试
+        // Execute test
         let mut voltage = *min_v;
         let mut last_soc = -1.0;
         let mut significant_changes = 0;
 
         while voltage <= *max_v + 0.0005 {
-            // 添加微小容差
+            // Add small tolerance
             match estimator.estimate_soc(voltage) {
                 Ok(soc) => {
-                    // 只在SOC变化超过0.1%时打印
+                    // Only print when SOC changes by more than 0.1%
                     if (soc - last_soc).abs() > 0.1 || voltage == *min_v || voltage == *max_v {
                         println!("    {:5.2}V -> {:6.2}%", voltage, soc);
                         last_soc = soc;
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             voltage += step;
-            // 处理浮点数精度
+            // Handle floating-point precision
             voltage = (voltage * 100.0).round() / 100.0;
         }
 
