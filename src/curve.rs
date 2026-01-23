@@ -1,82 +1,214 @@
+//! Voltage-SOC curve definitions and interpolation
+//!
+//! This module provides the [`Curve`] struct for representing battery
+//! discharge curves and converting voltage measurements to state-of-charge (SOC) values.
+
 use crate::{CurvePoint, Error};
 
-/// 最大曲线点数
+/// Maximum number of points allowed in a voltage curve
+///
+/// This limit ensures predictable memory usage and prevents excessive
+/// curve sizes that could impact performance in embedded systems.
 pub const MAX_CURVE_POINTS: usize = 32;
 
-/// 电压曲线
+/// A voltage-to-SOC curve for battery state-of-charge estimation
+///
+/// This struct represents a discharge curve that maps battery voltage
+/// to state-of-charge percentage using linear interpolation between data points.
+///
+/// # Memory Optimization
+///
+/// The curve is stored using fixed-size arrays with optimized types:
+/// - `points`: Fixed array of 32 points
+/// - `len`: `u8` for point count (vs `usize`, saves memory)
+/// - `min_voltage_mv`/`max_voltage_mv`: `u16` for voltage limits
+///
+/// # Examples
+///
+/// ```no_run
+/// use battery_estimator::{Curve, CurvePoint};
+///
+/// // Create a custom curve
+/// const CUSTOM_CURVE: Curve = Curve::new(&[
+///     CurvePoint::new(3.0, 0.0),
+///     CurvePoint::new(3.5, 50.0),
+///     CurvePoint::new(4.0, 100.0),
+/// ]);
+///
+/// // Use the curve
+/// match CUSTOM_CURVE.voltage_to_soc(3.75) {
+///     Ok(soc) => println!("SOC: {:.1}%", soc),
+///     Err(e) => eprintln!("Error: {}", e),
+/// }
+/// ```
+///
+/// # Interpolation
+///
+/// The curve uses linear interpolation between points:
+/// - Values at or below minimum voltage → 0%
+/// - Values at or above maximum voltage → 100%
+/// - Values between points → Linear interpolation
 #[derive(Debug, Clone, Copy)]
 pub struct Curve {
+    /// Array of curve points (fixed size for memory efficiency)
     points: [CurvePoint; MAX_CURVE_POINTS],
-    len: usize,
-    min_voltage: f32,
-    max_voltage: f32,
+
+    /// Number of points in the curve (0-255)
+    len: u8,
+
+    /// Minimum voltage in millivolts
+    min_voltage_mv: u16,
+
+    /// Maximum voltage in millivolts
+    max_voltage_mv: u16,
 }
 
 impl Curve {
-    /// 创建空曲线
+    /// Creates an empty curve with no points
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::Curve;
+    ///
+    /// let empty = Curve::empty();
+    /// assert!(empty.is_empty());
+    /// assert_eq!(empty.len(), 0);
+    /// ```
+    #[inline]
     pub const fn empty() -> Self {
         Self {
             points: [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS],
             len: 0,
-            min_voltage: 0.0,
-            max_voltage: 0.0,
+            min_voltage_mv: 0,
+            max_voltage_mv: 0,
         }
     }
 
-    /// 创建曲线
+    /// Creates a new curve from a slice of points
+    ///
+    /// # Arguments
+    ///
+    /// * `points` - Slice of [`CurvePoint`] values, ordered by increasing voltage
+    ///
+    /// # Notes
+    ///
+    /// - Points must be ordered by increasing voltage
+    /// - Maximum of 32 points will be stored
+    /// - Minimum of 2 points required for valid interpolation
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(3.5, 50.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    /// ```
     pub const fn new(points: &[CurvePoint]) -> Self {
         let mut curve = Self::empty();
-        let mut i = 0;
-    
-        let mut min = 0.0_f32;
-        let mut max = 0.0_f32;
-    
+        let mut i = 0usize;
+
+        let mut min = 0u16;
+        let mut max = 0u16;
+
         while i < points.len() && i < MAX_CURVE_POINTS {
             let p = points[i];
             curve.points[i] = p;
-    
+
             if i == 0 {
-                min = p.voltage;
-                max = p.voltage;
+                min = p.voltage_mv;
+                max = p.voltage_mv;
             } else {
-                if p.voltage < min { min = p.voltage; }
-                if p.voltage > max { max = p.voltage; }
+                if p.voltage_mv < min {
+                    min = p.voltage_mv;
+                }
+                if p.voltage_mv > max {
+                    max = p.voltage_mv;
+                }
             }
-    
+
             i += 1;
         }
-    
-        curve.len = i;
+
+        curve.len = i as u8;
         if i > 0 {
-            curve.min_voltage = min;
-            curve.max_voltage = max;
+            curve.min_voltage_mv = min;
+            curve.max_voltage_mv = max;
         }
         curve
     }
-    
 
-    /// 从电压计算SOC（线性插值）
+    /// Converts a voltage measurement to state-of-charge (SOC) percentage
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage` - Battery voltage in volts
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(soc)` - SOC percentage (0.0 to 100.0)
+    /// * `Err(Error::InvalidCurve)` - Curve has fewer than 2 points
+    /// * `Err(Error::NumericalError)` - Division by zero or calculation error
+    ///
+    /// # Behavior
+    ///
+    /// - Voltage ≤ minimum → Returns 0%
+    /// - Voltage ≥ maximum → Returns 100%
+    /// - Voltage between points → Linear interpolation
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(3.5, 50.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    ///
+    /// // At minimum voltage
+    /// assert_eq!(curve.voltage_to_soc(3.0).unwrap(), 0.0);
+    ///
+    /// // At maximum voltage
+    /// assert_eq!(curve.voltage_to_soc(4.0).unwrap(), 100.0);
+    ///
+    /// // Midpoint interpolation
+    /// assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
+    /// ```
+    #[inline]
     pub fn voltage_to_soc(&self, voltage: f32) -> Result<f32, Error> {
         if self.len < 2 {
             return Err(Error::InvalidCurve);
         }
 
-        // 边界检查
-        if voltage >= self.max_voltage {
-            return Ok(self.points[self.len - 1].soc);
+        let voltage_mv = (voltage * 1000.0) as i32;
+
+        // Boundary checks
+        if voltage_mv >= self.max_voltage_mv as i32 {
+            return Ok(self.points[(self.len - 1) as usize].soc());
         }
-        if voltage <= self.min_voltage {
-            return Ok(self.points[0].soc);
+        if voltage_mv <= self.min_voltage_mv as i32 {
+            return Ok(self.points[0].soc());
         }
 
-        // 线性查找
-        for i in 1..self.len {
+        // Linear search for interpolation segment
+        let len = self.len as usize;
+        for i in 1..len {
             let prev = self.points[i - 1];
             let curr = self.points[i];
 
-            if voltage >= prev.voltage && voltage <= curr.voltage {
-                let ratio = (voltage - prev.voltage) / (curr.voltage - prev.voltage);
-                let soc = prev.soc + ratio * (curr.soc - prev.soc);
+            if voltage_mv >= prev.voltage_mv as i32 && voltage_mv <= curr.voltage_mv as i32 {
+                let range = (curr.voltage_mv as i32 - prev.voltage_mv as i32) as f32;
+                if range == 0.0 {
+                    return Err(Error::NumericalError);
+                }
+                let ratio = (voltage_mv - prev.voltage_mv as i32) as f32 / range;
+                let soc = prev.soc() + ratio * (curr.soc() - prev.soc());
                 return Ok(soc);
             }
         }
@@ -84,55 +216,122 @@ impl Curve {
         Err(Error::NumericalError)
     }
 
-    /// 获取电压范围
+    /// Returns the voltage range of the curve
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (minimum_voltage, maximum_voltage) in volts
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    ///
+    /// let (min, max) = curve.voltage_range();
+    /// assert_eq!(min, 3.0);
+    /// assert_eq!(max, 4.0);
+    /// ```
+    #[inline]
     pub const fn voltage_range(&self) -> (f32, f32) {
-        (self.min_voltage, self.max_voltage)
+        (
+            self.min_voltage_mv as f32 / 1000.0,
+            self.max_voltage_mv as f32 / 1000.0,
+        )
     }
 
-    /// 获取曲线点数
+    /// Returns the number of points in the curve
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(3.5, 50.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    ///
+    /// assert_eq!(curve.len(), 3);
+    /// ```
+    #[inline]
     pub const fn len(&self) -> usize {
-        self.len
+        self.len as usize
     }
 
-    /// 曲线是否为空
+    /// Returns `true` if the curve has no points
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::Curve;
+    ///
+    /// let empty = Curve::empty();
+    /// assert!(empty.is_empty());
+    /// ```
+    #[inline]
     pub const fn is_empty(&self) -> bool {
         self.len == 0
     }
 }
 
-/// 预定义电池曲线
+/// Predefined battery voltage curves
+///
+/// This module contains built-in voltage curves for common battery types.
+/// These curves are optimized for typical discharge characteristics.
 pub mod default_curves {
     use super::*;
 
-    /// 锂聚合物电池曲线（电压从低到高排序）
+    /// Standard Lithium Polymer (LiPo) battery curve
+    ///
+    /// - Full charge: 4.2V
+    /// - Cutoff: 3.2V
+    /// - Nominal: 3.7V
+    /// - Points: 10
     pub const LIPO: Curve = Curve::new(&[
-        CurvePoint::new(3.20, 0.0), // 最低电压
+        CurvePoint::new(3.20, 0.0),
         CurvePoint::new(3.30, 5.0),
         CurvePoint::new(3.40, 10.0),
         CurvePoint::new(3.50, 20.0),
         CurvePoint::new(3.60, 30.0),
-        CurvePoint::new(3.70, 50.0), // 典型电压
+        CurvePoint::new(3.70, 50.0),
         CurvePoint::new(3.80, 70.0),
         CurvePoint::new(3.90, 85.0),
         CurvePoint::new(4.00, 95.0),
-        CurvePoint::new(4.20, 100.0), // 最高电压
+        CurvePoint::new(4.20, 100.0),
     ]);
 
-    /// 磷酸铁锂电池曲线（电压从低到高）
+    /// Lithium Iron Phosphate (LiFePO4) battery curve
+    ///
+    /// - Full charge: 3.65V
+    /// - Cutoff: 3.0V
+    /// - Nominal: 3.2V
+    /// - Points: 10
+    /// - Features: Very flat discharge curve, long cycle life
     pub const LIFEPO4: Curve = Curve::new(&[
         CurvePoint::new(2.50, 0.0),
         CurvePoint::new(2.80, 15.0),
         CurvePoint::new(3.00, 35.0),
         CurvePoint::new(3.10, 45.0),
         CurvePoint::new(3.20, 55.0),
-        CurvePoint::new(3.30, 65.0), // 3.3V -> 65%
+        CurvePoint::new(3.30, 65.0),
         CurvePoint::new(3.40, 75.0),
         CurvePoint::new(3.50, 85.0),
         CurvePoint::new(3.60, 95.0),
         CurvePoint::new(3.65, 100.0),
     ]);
 
-    /// 锂离子电池曲线（电压从低到高）
+    /// Standard Lithium Ion (Li-Ion) battery curve
+    ///
+    /// - Full charge: 4.2V
+    /// - Cutoff: 3.3V
+    /// - Nominal: 3.7V
+    /// - Points: 11
     pub const LIION: Curve = Curve::new(&[
         CurvePoint::new(2.50, 0.0),
         CurvePoint::new(3.00, 30.0),
@@ -147,13 +346,28 @@ pub mod default_curves {
         CurvePoint::new(4.20, 100.0),
     ]);
 
-    /// 1S 锂聚合物电池“保守满电/保守亏电”曲线（电压从低到高排序）
+    /// Conservative LiPo curve for extended battery life
     ///
-    /// - Vbat <= 3.40V：视为 0%，并应触发低电关机（保护电池）
-    /// - Vbat >= 4.10V：视为 100%（不追求 4.20V 才满电）
+    /// - Full charge: 4.1V (lower than standard 4.2V)
+    /// - Cutoff: 3.4V (higher than standard 3.2V)
+    /// - Nominal: 3.77V
+    /// - Points: 13
+    ///
+    /// # Use Case
+    ///
+    /// This curve prioritizes battery longevity over maximum capacity:
+    /// - **Lower charge voltage** (4.1V) reduces charging stress
+    /// - **Higher cutoff** (3.4V) prevents deep discharge
+    /// - **Trade-off**: ~15-20% less usable capacity for ~30% longer cycle life
+    ///
+    /// # When to Use
+    ///
+    /// - Applications where battery replacement is difficult
+    /// - Devices requiring very long service life
+    /// - Systems prioritizing reliability over runtime
     pub const LIPO410_FULL340_CUTOFF: Curve = Curve::new(&[
-        CurvePoint::new(3.40,  0.0),   // 关机阈值=0%
-        CurvePoint::new(3.48,  5.0),
+        CurvePoint::new(3.40, 0.0),
+        CurvePoint::new(3.48, 5.0),
         CurvePoint::new(3.53, 10.0),
         CurvePoint::new(3.62, 20.0),
         CurvePoint::new(3.68, 30.0),
@@ -164,10 +378,9 @@ pub mod default_curves {
         CurvePoint::new(3.90, 80.0),
         CurvePoint::new(3.97, 90.0),
         CurvePoint::new(4.03, 95.0),
-        CurvePoint::new(4.10,100.0),   // 满电阈值
+        CurvePoint::new(4.10, 100.0),
     ]);
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

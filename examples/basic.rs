@@ -10,6 +10,12 @@ fn main() {
     test_battery(BatteryChemistry::LiPo, "LiPo", 3.2, 4.2);
     test_battery(BatteryChemistry::LiFePO4, "LiFePO4", 2.5, 3.65);
     test_battery(BatteryChemistry::LiIon, "Li-Ion", 2.5, 4.2);
+    test_battery(
+        BatteryChemistry::Lipo410Full340Cutoff,
+        "LiPo 4.1V/3.4V (Conservative)",
+        3.4,
+        4.1,
+    );
 
     // 测试边界情况
     println!("\n\nBoundary Case Tests");
@@ -157,6 +163,25 @@ fn test_characteristic_points(estimator: &SocEstimator, name: &str) {
                 (3.7, "Nominal voltage"),
                 (4.0, "High voltage"),
                 (4.2, "Full charge"),
+            ];
+
+            for (voltage, desc) in points.iter() {
+                match estimator.estimate_soc(*voltage) {
+                    Ok(soc) => println!("  {:5.2}V ({:20}) -> {:6.2}%", voltage, desc, soc),
+                    Err(e) => println!("  {:5.2}V ({:20}) -> ERROR: {}", voltage, desc, e),
+                }
+            }
+        }
+        "LiPo 4.1V/3.4V (Conservative)" => {
+            // LiPo 保守曲线特征电压
+            let points = [
+                (3.4, "Shutdown cutoff (0%)"),
+                (3.5, "Very low (10%)"),
+                (3.7, "Low voltage (40%)"),
+                (3.77, "Mid voltage (50%)"),
+                (3.9, "High voltage (80%)"),
+                (4.03, "Near full (95%)"),
+                (4.1, "Full charge (100%)"),
             ];
 
             for (voltage, desc) in points.iter() {

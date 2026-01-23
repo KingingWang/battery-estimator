@@ -28,6 +28,12 @@ fn test_all_batteries_with_temperature() {
         (BatteryChemistry::LiPo, "LiPo", 3.2, 4.2),
         (BatteryChemistry::LiFePO4, "LiFePO4", 2.5, 3.65),
         (BatteryChemistry::LiIon, "Li-Ion", 2.5, 4.2),
+        (
+            BatteryChemistry::Lipo410Full340Cutoff,
+            "LiPo 4.1V/3.4V (Conservative)",
+            3.4,
+            4.1,
+        ),
     ];
 
     for (chem, name, min_v, max_v) in chemistries.iter() {
