@@ -97,7 +97,7 @@ mod types;
 pub use compensation::{
     compensate_aging, compensate_temperature, default_temperature_compensation,
 };
-pub use curve::{Curve, default_curves};
+pub use curve::{default_curves, Curve};
 pub use error::Error;
 pub use estimator::SocEstimator;
 pub use types::{BatteryChemistry, CurvePoint};

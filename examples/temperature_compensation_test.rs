@@ -2,7 +2,7 @@
 //!
 //! 测试不同温度下SOC的变化，展示温度补偿的效果
 
-use battery_estimator::{BatteryChemistry, SocEstimator, default_temperature_compensation};
+use battery_estimator::{default_temperature_compensation, BatteryChemistry, SocEstimator};
 
 fn main() {
     println!("Battery SOC Estimator - Temperature Compensation Test");

@@ -1,8 +1,8 @@
 //! SOC(荷电状态)估算器（集成温度补偿）
 
 use crate::{
-    BatteryChemistry, Curve, Error, compensate_aging, compensate_temperature, default_curves,
-    default_temperature_compensation,
+    compensate_aging, compensate_temperature, default_curves, default_temperature_compensation,
+    BatteryChemistry, Curve, Error,
 };
 
 /// SOC估算器配置（优化内存布局）
