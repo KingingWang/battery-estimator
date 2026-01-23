@@ -25,6 +25,9 @@ jobs:
       with:
         components: rustfmt, clippy
       
+    - name: Install thumbv7m-none-eabi target
+      run: rustup target add thumbv7m-none-eabi
+      
     - name: Cache cargo
       uses: actions/cache@v4
       with:
@@ -100,6 +103,9 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
+      
+    - name: Install thumbv7m-none-eabi target
+      run: rustup target add thumbv7m-none-eabi
       
     - name: Cache cargo
       uses: actions/cache@v4
