@@ -157,11 +157,12 @@ jobs:
       run: cargo tarpaulin --out Xml --all-features --verbose
       
     - name: Upload to codecov.io
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         files: ./cobertura.xml
         flags: unittests
         name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   # 文档构建检查
   docs:
