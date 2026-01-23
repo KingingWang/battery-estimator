@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # 检查代码质量和格式
+  check:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Check formatting
+      run: cargo fmt -- --check
+      
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+      
+    - name: Check for unsafe code
+      run: |
+        if grep -r "unsafe" src/; then
+          echo "Error: Unsafe code detected in no_std library"
+          exit 1
+        fi
+      shell: bash
+
+  # 标准库环境测试
+  test:
+    name: Test (std)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ matrix.rust }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Build
+      run: cargo build --verbose
+      
+    - name: Run tests
+      run: cargo test --verbose
+      
+    - name: Run documentation tests
+      run: cargo test --doc --verbose
+
+  # no_std 环境测试
+  test-no-std:
+    name: Test (no_std)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-no-std-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Build for no_std target
+      run: cargo build --target thumbv7m-none-eabi --verbose
+      
+    - name: Verify no_std compilation
+      run: |
+        cargo check --target thumbv7m-none-eabi --no-default-features --verbose
+        cargo check --target thumbv7m-none-eabi --features default --verbose
+
+  # 文档构建检查
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-docs-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Build documentation
+      run: cargo doc --no-deps --all-features
+      
+    - name: Check documentation links
+      run: cargo doc --no-deps --all-features --document-private-items
+
+  # 示例程序测试
+  examples:
+    name: Examples
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-examples-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Run basic example
+      run: cargo run --example basic
+      
+    - name: Run custom_curve example
+      run: cargo run --example custom_curve
+      
+    - name: Run precise_test example
+      run: cargo run --example precise_test
+      
+    - name: Run temperature_compensation_test example
+      run: cargo run --example temperature_compensation_test
+
+  # 最低支持版本检查 (MSRV)
+  msrv:
+    name: Check MSRV
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: '1.70.0'
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-msrv-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Verify MSRV
+      run: |
+        cargo build --verbose
+        cargo test --verbose
+
+  # 发布检查
+  publish:
+    name: Publish Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-publish-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Check publish
+      run: cargo publish --dry-run
