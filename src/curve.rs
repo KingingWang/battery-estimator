@@ -403,8 +403,8 @@ mod tests {
         ]);
 
         // Test boundaries
-        assert_eq!(curve.voltage_to_soc(2.9).unwrap(), 0.0); // 低于最小值
-        assert_eq!(curve.voltage_to_soc(4.1).unwrap(), 100.0); // 高于最大值
+        assert_eq!(curve.voltage_to_soc(2.9).unwrap(), 0.0);
+        assert_eq!(curve.voltage_to_soc(4.1).unwrap(), 100.0);
 
         // Test intermediate values
         assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
