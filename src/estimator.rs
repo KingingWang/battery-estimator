@@ -295,7 +295,7 @@ mod tests {
         // 测试典型值
         let soc = estimator.estimate_soc(3.7).unwrap();
         assert!(
-            soc >= 45.0 && soc <= 55.0,
+            (45.0..=55.0).contains(&soc),
             "3.7V should be around 50%, got {}",
             soc
         );
