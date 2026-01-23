@@ -418,4 +418,231 @@ mod tests {
         // Curve with only one point should error
         assert!(curve.voltage_to_soc(3.5).is_err());
     }
+
+    #[test]
+    fn test_curve_empty() {
+        let curve = Curve::empty();
+        assert!(curve.is_empty());
+        assert_eq!(curve.len(), 0);
+        assert!(curve.voltage_to_soc(3.0).is_err());
+    }
+
+    #[test]
+    fn test_curve_multiple_points() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.5, 50.0),
+            CurvePoint::new(4.0, 100.0),
+        ]);
+
+        assert_eq!(curve.len(), 3);
+
+        // Test exact points
+        assert_eq!(curve.voltage_to_soc(3.0).unwrap(), 0.0);
+        assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
+        assert_eq!(curve.voltage_to_soc(4.0).unwrap(), 100.0);
+
+        // Test interpolation
+        let soc = curve.voltage_to_soc(3.25).unwrap();
+        assert!((soc - 25.0).abs() < 0.1);
+
+        let soc = curve.voltage_to_soc(3.75).unwrap();
+        assert!((soc - 75.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_curve_voltage_range() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        let (min, max) = curve.voltage_range();
+        assert_eq!(min, 3.0);
+        assert_eq!(max, 4.0);
+    }
+
+    #[test]
+    fn test_curve_max_points() {
+        // Test that curve handles maximum number of points
+        let mut points = [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS];
+        for (i, point) in points.iter_mut().enumerate().take(MAX_CURVE_POINTS) {
+            let voltage = 3.0 + (i as f32 * 0.1);
+            let soc = (i as f32 / (MAX_CURVE_POINTS - 1) as f32) * 100.0;
+            *point = CurvePoint::new(voltage, soc);
+        }
+
+        let curve = Curve::new(&points);
+        assert_eq!(curve.len(), MAX_CURVE_POINTS);
+
+        // Test interpolation at various points
+        assert!(curve.voltage_to_soc(3.5).is_ok());
+    }
+
+    #[test]
+    fn test_curve_truncation() {
+        // Test that curve truncates if more than MAX_CURVE_POINTS are provided
+        let mut points = [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS + 10];
+        for (i, point) in points.iter_mut().enumerate().take(MAX_CURVE_POINTS + 10) {
+            let voltage = 3.0 + (i as f32 * 0.1);
+            let soc = (i as f32 / (MAX_CURVE_POINTS + 9) as f32) * 100.0;
+            *point = CurvePoint::new(voltage, soc);
+        }
+
+        let curve = Curve::new(&points);
+        assert_eq!(curve.len(), MAX_CURVE_POINTS);
+    }
+
+    #[test]
+    fn test_curve_interpolation_precision() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        // Test interpolation at 0.01V precision
+        let soc = curve.voltage_to_soc(3.01).unwrap();
+        assert!((soc - 1.0).abs() < 0.1);
+
+        let soc = curve.voltage_to_soc(3.99).unwrap();
+        assert!((soc - 99.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_curve_negative_voltage() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        // Negative voltage should return minimum SOC
+        let soc = curve.voltage_to_soc(-1.0).unwrap();
+        assert_eq!(soc, 0.0);
+    }
+
+    #[test]
+    fn test_curve_very_high_voltage() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        // Very high voltage should return maximum SOC
+        let soc = curve.voltage_to_soc(100.0).unwrap();
+        assert_eq!(soc, 100.0);
+    }
+
+    #[test]
+    fn test_curve_nonlinear_soc() {
+        // Test curve with non-linear SOC progression
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.5, 80.0),  // Steep rise
+            CurvePoint::new(4.0, 100.0), // Gradual rise
+        ]);
+
+        // Test that interpolation works with non-linear data
+        let soc = curve.voltage_to_soc(3.25).unwrap();
+        assert!(soc > 30.0 && soc < 50.0);
+
+        let soc = curve.voltage_to_soc(3.75).unwrap();
+        assert!(soc > 85.0 && soc < 95.0);
+    }
+
+    #[test]
+    fn test_curve_copy() {
+        let curve1 = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+        let curve2 = curve1;
+
+        assert_eq!(curve1.len(), curve2.len());
+        assert_eq!(curve1.voltage_range(), curve2.voltage_range());
+    }
+
+    #[test]
+    fn test_curve_decimal_voltages() {
+        let curve = Curve::new(&[CurvePoint::new(3.15, 0.0), CurvePoint::new(3.85, 100.0)]);
+
+        // Test with decimal voltages
+        let soc = curve.voltage_to_soc(3.50).unwrap();
+        assert!((soc - 50.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_curve_zero_voltage_range() {
+        // Test curve with very small voltage range
+        let curve = Curve::new(&[CurvePoint::new(3.70, 0.0), CurvePoint::new(3.71, 100.0)]);
+
+        // Should still interpolate correctly
+        let soc = curve.voltage_to_soc(3.705).unwrap();
+        assert!((soc - 50.0).abs() < 5.0);
+    }
+
+    #[test]
+    fn test_default_curves_exist() {
+        // Test that all default curves can be created
+        assert_eq!(default_curves::LIPO.len(), 10);
+        assert_eq!(default_curves::LIFEPO4.len(), 10);
+        assert_eq!(default_curves::LIION.len(), 11);
+        assert_eq!(default_curves::LIPO410_FULL340_CUTOFF.len(), 13);
+    }
+
+    #[test]
+    fn test_default_curves_valid() {
+        // Test that all default curves produce valid results
+        let curves = [
+            &default_curves::LIPO,
+            &default_curves::LIFEPO4,
+            &default_curves::LIION,
+            &default_curves::LIPO410_FULL340_CUTOFF,
+        ];
+
+        for curve in curves.iter() {
+            // Test that curve has at least 2 points
+            assert!(curve.len() >= 2);
+
+            // Test that curve produces valid SOC values
+            let (min_v, max_v) = curve.voltage_range();
+            let mid_v = (min_v + max_v) / 2.0;
+
+            assert!(curve.voltage_to_soc(min_v).is_ok());
+            assert!(curve.voltage_to_soc(max_v).is_ok());
+            assert!(curve.voltage_to_soc(mid_v).is_ok());
+        }
+    }
+
+    #[test]
+    fn test_curve_edge_case_interpolation() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.1, 10.0),
+            CurvePoint::new(3.2, 20.0),
+        ]);
+
+        // Test interpolation exactly at boundary between segments
+        let soc = curve.voltage_to_soc(3.1).unwrap();
+        assert_eq!(soc, 10.0);
+    }
+
+    #[test]
+    fn test_curve_very_small_soc_values() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.1, 0.1), // Very small SOC change
+            CurvePoint::new(4.0, 100.0),
+        ]);
+
+        // Test that small SOC values are handled correctly
+        let soc = curve.voltage_to_soc(3.05).unwrap();
+        assert!((0.0..1.0).contains(&soc));
+    }
+
+    #[test]
+    fn test_curve_large_soc_values() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.9, 99.9), // Very large SOC value
+            CurvePoint::new(4.0, 100.0),
+        ]);
+
+        // Test that large SOC values are handled correctly
+        let soc = curve.voltage_to_soc(3.95).unwrap();
+        assert!(soc > 99.0 && soc <= 100.0);
+    }
+
+    #[test]
+    fn test_curve_single_point_error() {
+        let curve = Curve::new(&[CurvePoint::new(3.7, 50.0)]);
+
+        // Should return InvalidCurve error
+        let result = curve.voltage_to_soc(3.7);
+        assert!(matches!(result, Err(Error::InvalidCurve)));
+    }
 }

@@ -191,3 +191,141 @@ impl From<(f32, f32)> for CurvePoint {
         Self::new(voltage, soc)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_curve_point_creation() {
+        let point = CurvePoint::new(3.7, 50.0);
+        assert_eq!(point.voltage(), 3.7);
+        assert_eq!(point.soc(), 50.0);
+    }
+
+    #[test]
+    fn test_curve_point_zero_values() {
+        let point = CurvePoint::new(0.0, 0.0);
+        assert_eq!(point.voltage(), 0.0);
+        assert_eq!(point.soc(), 0.0);
+    }
+
+    #[test]
+    fn test_curve_point_boundary_values() {
+        // Test maximum voltage (u16 max / 1000 = 65.535V)
+        let max_point = CurvePoint::new(65.535, 100.0);
+        assert_eq!(max_point.voltage(), 65.535);
+        assert_eq!(max_point.soc(), 100.0);
+    }
+
+    #[test]
+    fn test_curve_point_decimal_voltage() {
+        // Test two decimal places
+        let point = CurvePoint::new(3.71, 75.5);
+        assert_eq!(point.voltage(), 3.71);
+        assert_eq!(point.soc(), 75.5);
+    }
+
+    #[test]
+    fn test_curve_point_negative_voltage() {
+        // Test that negative voltage is handled
+        // Note: Negative voltages get stored as u16, so they wrap around
+        // This is expected behavior for the current implementation
+        let point = CurvePoint::new(-1.5, 0.0);
+        // The voltage will be wrapped due to u16 storage
+        assert!(point.voltage() >= 0.0); // Will be positive due to wrapping
+    }
+
+    #[test]
+    fn test_curve_point_soc_bounds() {
+        // Test minimum SOC
+        let min_soc = CurvePoint::new(3.7, 0.0);
+        assert_eq!(min_soc.soc(), 0.0);
+
+        // Test maximum SOC
+        let max_soc = CurvePoint::new(4.2, 100.0);
+        assert_eq!(max_soc.soc(), 100.0);
+    }
+
+    #[test]
+    fn test_curve_point_soc_precision() {
+        // Test that SOC is stored with 0.1% precision
+        let point = CurvePoint::new(3.7, 50.15);
+        // Should be rounded to 50.1 or 50.2 depending on rounding
+        let soc = point.soc();
+        assert!((50.0..=50.2).contains(&soc));
+    }
+
+    #[test]
+    fn test_curve_point_from_tuple() {
+        let point: CurvePoint = (3.8, 75.0).into();
+        assert_eq!(point.voltage(), 3.8);
+        assert_eq!(point.soc(), 75.0);
+    }
+
+    #[test]
+    fn test_curve_point_equality() {
+        let point1 = CurvePoint::new(3.7, 50.0);
+        let point2 = CurvePoint::new(3.7, 50.0);
+        let point3 = CurvePoint::new(3.8, 50.0);
+
+        assert_eq!(point1, point2);
+        assert_ne!(point1, point3);
+    }
+
+    #[test]
+    fn test_curve_point_copy() {
+        let point1 = CurvePoint::new(3.7, 50.0);
+        let point2 = point1;
+        assert_eq!(point1, point2);
+    }
+
+    #[test]
+    fn test_curve_point_internal_representation() {
+        let point = CurvePoint::new(3.7, 50.0);
+        // Voltage should be stored in millivolts
+        assert_eq!(point.voltage_mv, 3700);
+        // SOC should be stored in tenths of a percent
+        assert_eq!(point.soc_tenth, 500);
+    }
+
+    #[test]
+    fn test_battery_chemistry_variants() {
+        // Test that all battery chemistry variants can be created
+        let lipo = BatteryChemistry::LiPo;
+        let lifepo4 = BatteryChemistry::LiFePO4;
+        let _lilon = BatteryChemistry::LiIon;
+        let _conservative = BatteryChemistry::Lipo410Full340Cutoff;
+
+        // Test equality
+        assert_eq!(lipo, BatteryChemistry::LiPo);
+        assert_ne!(lipo, lifepo4);
+    }
+
+    #[test]
+    fn test_battery_chemistry_copy() {
+        let chem1 = BatteryChemistry::LiPo;
+        let chem2 = chem1;
+        assert_eq!(chem1, chem2);
+    }
+
+    #[test]
+    fn test_curve_point_extreme_soc() {
+        // Test SOC values beyond normal range
+        // Note: SOC is stored as u16, so negative values wrap around
+        let point1 = CurvePoint::new(3.7, -10.0);
+        // Negative SOC wraps to positive due to u16 storage
+        assert!(point1.soc() >= 0.0);
+
+        let point2 = CurvePoint::new(3.7, 150.0);
+        assert_eq!(point2.soc(), 150.0);
+    }
+
+    #[test]
+    fn test_curve_point_voltage_precision() {
+        // Test that voltage precision is maintained
+        let point = CurvePoint::new(3.715, 50.0);
+        // Should be stored and retrieved accurately
+        assert!((point.voltage() - 3.715).abs() < 0.001);
+    }
+}

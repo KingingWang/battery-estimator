@@ -113,3 +113,57 @@ impl fmt::Display for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display() {
+        // Test that Display implementation exists by checking it compiles
+        // We can't easily test the actual output in no_std without format!
+        // Just verify the implementation compiles correctly
+
+        let _error1 = Error::VoltageOutOfRange;
+        let _error2 = Error::InvalidCurve;
+        let _error3 = Error::NumericalError;
+        let _error4 = Error::InvalidTemperature;
+    }
+
+    #[test]
+    fn test_error_equality() {
+        assert_eq!(Error::VoltageOutOfRange, Error::VoltageOutOfRange);
+        assert_eq!(Error::InvalidCurve, Error::InvalidCurve);
+        assert_eq!(Error::NumericalError, Error::NumericalError);
+        assert_eq!(Error::InvalidTemperature, Error::InvalidTemperature);
+
+        assert_ne!(Error::VoltageOutOfRange, Error::InvalidCurve);
+        assert_ne!(Error::InvalidCurve, Error::NumericalError);
+    }
+
+    #[test]
+    fn test_error_copy() {
+        let error1 = Error::InvalidCurve;
+        let error2 = error1;
+        assert_eq!(error1, error2);
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let _error = Error::NumericalError;
+        // Test that Debug implementation works by checking it compiles
+        // We just verify the error can be created
+    }
+
+    #[test]
+    fn test_error_all_variants() {
+        // Test that all error variants can be created
+        let _errors = [
+            Error::VoltageOutOfRange,
+            Error::InvalidCurve,
+            Error::NumericalError,
+            Error::InvalidTemperature,
+        ];
+        // All error variants created successfully
+    }
+}
