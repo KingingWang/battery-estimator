@@ -42,10 +42,12 @@ jobs:
       
     - name: Check for unsafe code
       run: |
-        if grep -r "unsafe" src/; then
+        # Check for actual unsafe code blocks (not just lint attributes)
+        if grep -r "unsafe " src/ || grep -r "unsafe{" src/ || grep -r "unsafe (" src/; then
           echo "Error: Unsafe code detected in no_std library"
           exit 1
         fi
+        echo "✓ No unsafe code blocks found"
       shell: bash
 
   # 标准库环境测试
