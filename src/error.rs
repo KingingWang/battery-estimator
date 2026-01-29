@@ -3,7 +3,7 @@
 //! This module defines the error types that can occur during battery
 //! state-of-charge estimation operations.
 
-use core::fmt;
+use thiserror::Error;
 
 /// Errors that can occur during battery SOC estimation
 ///
@@ -24,7 +24,7 @@ use core::fmt;
 ///     Err(e) => eprintln!("Error: {}", e),
 /// }
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Error, Debug, Clone, Copy, PartialEq)]
 pub enum Error {
     /// Voltage value is outside the valid range for the battery curve
     ///
@@ -42,6 +42,7 @@ pub enum Error {
     /// // Note: The estimator actually clamps values to the curve range,
     /// // so this error is typically not encountered in normal use
     /// ```
+    #[error("Voltage out of valid range")]
     VoltageOutOfRange,
 
     /// The voltage curve data is invalid
@@ -61,6 +62,7 @@ pub enum Error {
     /// let result = invalid_curve.voltage_to_soc(3.7);
     /// assert!(matches!(result, Err(Error::InvalidCurve)));
     /// ```
+    #[error("Invalid voltage curve")]
     InvalidCurve,
 
     /// A numerical error occurred during calculation
@@ -81,6 +83,7 @@ pub enum Error {
     ///     CurvePoint::new(3.7, 60.0), // Duplicate voltage!
     /// ]);
     /// ```
+    #[error("Numerical error in calculation")]
     NumericalError,
 
     /// The temperature value is invalid
@@ -100,34 +103,40 @@ pub enum Error {
     /// // Invalid temperature
     /// let result = estimator.estimate_soc_with_temp(3.7, f32::NAN);
     /// ```
+    #[error("Invalid temperature")]
     InvalidTemperature,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::VoltageOutOfRange => write!(f, "Voltage out of valid range"),
-            Error::InvalidCurve => write!(f, "Invalid voltage curve"),
-            Error::NumericalError => write!(f, "Numerical error in calculation"),
-            Error::InvalidTemperature => write!(f, "Invalid temperature"),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::fmt::Write;
 
     #[test]
     fn test_error_display() {
-        // Test that Display implementation exists by checking it compiles
-        // We can't easily test the actual output in no_std without format!
-        // Just verify the implementation compiles correctly
+        // In no-std, Display is available via core::fmt
+        // We can test that the Display implementation compiles and works
+        let mut buffer = [0u8; 64];
 
-        let _error1 = Error::VoltageOutOfRange;
-        let _error2 = Error::InvalidCurve;
-        let _error3 = Error::NumericalError;
-        let _error4 = Error::InvalidTemperature;
+        // Test VoltageOutOfRange
+        let mut writer = BufferWriter::new(&mut buffer);
+        write!(writer, "{}", Error::VoltageOutOfRange).unwrap();
+        assert_eq!(writer.as_str(), "Voltage out of valid range");
+
+        // Test InvalidCurve
+        let mut writer = BufferWriter::new(&mut buffer);
+        write!(writer, "{}", Error::InvalidCurve).unwrap();
+        assert_eq!(writer.as_str(), "Invalid voltage curve");
+
+        // Test NumericalError
+        let mut writer = BufferWriter::new(&mut buffer);
+        write!(writer, "{}", Error::NumericalError).unwrap();
+        assert_eq!(writer.as_str(), "Numerical error in calculation");
+
+        // Test InvalidTemperature
+        let mut writer = BufferWriter::new(&mut buffer);
+        write!(writer, "{}", Error::InvalidTemperature).unwrap();
+        assert_eq!(writer.as_str(), "Invalid temperature");
     }
 
     #[test]
@@ -150,43 +159,66 @@ mod tests {
 
     #[test]
     fn test_error_debug() {
-        let _error = Error::NumericalError;
-        // Test that Debug implementation works by checking it compiles
-        // We just verify the error can be created
+        let error = Error::NumericalError;
+        let mut buffer = [0u8; 64];
+        let mut writer = BufferWriter::new(&mut buffer);
+        write!(writer, "{:?}", error).unwrap();
+        assert!(writer.as_str().contains("NumericalError"));
     }
 
     #[test]
     fn test_error_all_variants() {
         // Test that all error variants can be created
-        let _errors = [
+        let errors = [
             Error::VoltageOutOfRange,
             Error::InvalidCurve,
             Error::NumericalError,
             Error::InvalidTemperature,
         ];
-        // All error variants created successfully
+        assert_eq!(errors.len(), 4);
     }
 
     #[test]
-    fn test_error_display_formatting() {
-        // Test Display trait implementation (lines 107-112)
-        // In no_std environment, we verify the implementation by using it
-
+    fn test_error_variants_distinct() {
         let error1 = Error::VoltageOutOfRange;
         let error2 = Error::InvalidCurve;
         let error3 = Error::NumericalError;
         let error4 = Error::InvalidTemperature;
 
-        // Verify Display implementation works by checking the errors can be used
-        // The Display implementation is used internally by assert macros
-        assert!(!matches!(error1, Error::InvalidCurve));
-        assert!(!matches!(error2, Error::VoltageOutOfRange));
-        assert!(!matches!(error3, Error::InvalidTemperature));
-        assert!(!matches!(error4, Error::NumericalError));
-
         // Verify all variants are distinct
         assert_ne!(error1, error2);
         assert_ne!(error2, error3);
         assert_ne!(error3, error4);
+        assert_ne!(error1, error3);
+        assert_ne!(error1, error4);
+        assert_ne!(error2, error4);
+    }
+
+    // Helper struct for testing Display in no-std
+    struct BufferWriter<'a> {
+        buffer: &'a mut [u8],
+        pos: usize,
+    }
+
+    impl<'a> BufferWriter<'a> {
+        fn new(buffer: &'a mut [u8]) -> Self {
+            BufferWriter { buffer, pos: 0 }
+        }
+
+        fn as_str(&self) -> &str {
+            core::str::from_utf8(&self.buffer[..self.pos]).unwrap()
+        }
+    }
+
+    impl<'a> core::fmt::Write for BufferWriter<'a> {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            let bytes = s.as_bytes();
+            if self.pos + bytes.len() > self.buffer.len() {
+                return Err(core::fmt::Error);
+            }
+            self.buffer[self.pos..self.pos + bytes.len()].copy_from_slice(bytes);
+            self.pos += bytes.len();
+            Ok(())
+        }
     }
 }

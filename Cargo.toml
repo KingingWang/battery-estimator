@@ -1,6 +1,6 @@
 [package]
 name = "battery-estimator"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 rust-version = "1.82"
 description = "A no_std, zero-dependency library for estimating battery SOC from voltage"
@@ -12,5 +12,7 @@ categories = ["embedded", "no-std"]
 authors = ["kingingwang@foxmail.com"]
 
 [dependencies]
+thiserror = { version = "2", default-features = false }
+
 [features]
 default = []
