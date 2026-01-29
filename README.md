@@ -8,7 +8,7 @@ A lightweight, `no_std` compatible Rust library for estimating battery State of 
 
 ## Features
 
-- ✅ **Zero dependencies** - No external crates required
+- ✅ **Minimal dependencies** - This crate only depends on `thiserror` for error handling  
 - ✅ **`no_std` compatible** - Perfect for embedded systems and microcontrollers
 - ✅ **No heap allocations** - Uses only stack memory and fixed-size arrays
 - ✅ **Multiple battery chemistries** - Built-in support for LiPo, LiFePO4, Li-Ion
