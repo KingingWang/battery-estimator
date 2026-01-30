@@ -140,17 +140,26 @@ impl SocEstimator {
         Self { curve, config }
     }
 
-    /// Create estimator with configuration
-    pub fn with_config_non_const(chemistry: BatteryChemistry, config: EstimatorConfig) -> Self {
-        Self::with_config(chemistry, config)
-    }
-
     /// Estimate SOC (without temperature compensation)
     pub fn estimate_soc(&self, voltage: f32) -> Result<f32, Error> {
         self.curve.voltage_to_soc(voltage)
     }
 
-    /// Estimate SOC (with temperature compensation) - Always applies temperature compensation, ignoring configuration
+    /// Estimate SOC with default temperature compensation (ignores configuration)
+    ///
+    /// This method always applies temperature compensation using default parameters
+    /// (nominal temperature: 25°C, coefficient: 0.0005), regardless of the estimator's
+    /// current configuration. For configuration-based compensation, use
+    /// `estimate_soc_compensated()` instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage` - Battery voltage in volts
+    /// * `temperature` - Current battery temperature in Celsius
+    ///
+    /// # Returns
+    ///
+    /// Temperature-compensated SOC percentage using default parameters
     pub fn estimate_soc_with_temp(&self, voltage: f32, temperature: f32) -> Result<f32, Error> {
         let base_soc = self.curve.voltage_to_soc(voltage)?;
 
@@ -205,7 +214,8 @@ impl SocEstimator {
     /// Enable temperature compensation
     #[inline]
     pub fn enable_temperature_compensation(&mut self, nominal_temp: f32, coefficient: f32) {
-        self.config = EstimatorConfig::default()
+        self.config = self
+            .config
             .with_temperature_compensation()
             .with_nominal_temperature(nominal_temp)
             .with_temperature_coefficient(coefficient);
@@ -214,7 +224,8 @@ impl SocEstimator {
     /// Enable aging compensation
     #[inline]
     pub fn enable_aging_compensation(&mut self, age_years: f32, aging_factor: f32) {
-        self.config = EstimatorConfig::default()
+        self.config = self
+            .config
             .with_aging_compensation()
             .with_age_years(age_years)
             .with_aging_factor(aging_factor);
@@ -633,18 +644,6 @@ mod tests {
             .with_nominal_temperature(20.0);
 
         let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
-
-        assert!(estimator.config().enable_temperature_compensation());
-        assert_eq!(estimator.config().nominal_temperature, 20.0);
-    }
-
-    #[test]
-    fn test_estimator_with_config_non_const() {
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_nominal_temperature(20.0);
-
-        let estimator = SocEstimator::with_config_non_const(BatteryChemistry::LiPo, config);
 
         assert!(estimator.config().enable_temperature_compensation());
         assert_eq!(estimator.config().nominal_temperature, 20.0);
