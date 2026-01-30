@@ -27,7 +27,7 @@ impl EstimatorConfig {
     pub const fn default() -> Self {
         Self {
             nominal_temperature: 25.0,
-            temperature_coefficient: 0.0005, // 0.05% per °C
+            temperature_coefficient: 0.005, // 0.5% per °C (matches default_temperature_compensation)
             age_years: 0.0,
             aging_factor: 0.02, // 2% capacity loss per year
             flags: 0,
@@ -148,7 +148,7 @@ impl SocEstimator {
     /// Estimate SOC with default temperature compensation (ignores configuration)
     ///
     /// This method always applies temperature compensation using default parameters
-    /// (nominal temperature: 25°C, coefficient: 0.0005), regardless of the estimator's
+    /// (nominal temperature: 25°C, coefficient: 0.005), regardless of the estimator's
     /// current configuration. For configuration-based compensation, use
     /// `estimate_soc_compensated()` instead.
     ///
@@ -321,10 +321,16 @@ mod tests {
         let cold_soc = estimator.estimate_soc_with_temp(3.7, 0.0).unwrap();
         let hot_soc = estimator.estimate_soc_with_temp(3.7, 50.0).unwrap();
 
-        // Low temperature should show higher SOC
-        assert!(cold_soc > base_soc, "Cold temp should increase SOC");
-        // High temperature should show lower SOC
-        assert!(hot_soc < base_soc, "Hot temp should decrease SOC");
+        // Low temperature should show LOWER SOC (reduced capacity due to higher internal resistance)
+        assert!(
+            cold_soc < base_soc,
+            "Cold temp should decrease SOC due to reduced capacity"
+        );
+        // High temperature should show slightly higher SOC (better efficiency)
+        assert!(
+            hot_soc >= base_soc,
+            "Hot temp should maintain or slightly increase SOC"
+        );
     }
 
     #[test]
@@ -370,7 +376,7 @@ mod tests {
         let config = EstimatorConfig::default();
 
         assert_eq!(config.nominal_temperature, 25.0);
-        assert_eq!(config.temperature_coefficient, 0.0005);
+        assert_eq!(config.temperature_coefficient, 0.005);
         assert_eq!(config.age_years, 0.0);
         assert_eq!(config.aging_factor, 0.02);
         assert!(!config.enable_temperature_compensation());
@@ -465,7 +471,7 @@ mod tests {
         let config: EstimatorConfig = Default::default();
 
         assert_eq!(config.nominal_temperature, 25.0);
-        assert_eq!(config.temperature_coefficient, 0.0005);
+        assert_eq!(config.temperature_coefficient, 0.005);
         assert_eq!(config.age_years, 0.0);
         assert_eq!(config.aging_factor, 0.02);
     }
@@ -486,21 +492,21 @@ mod tests {
 
     #[test]
     fn test_estimate_soc_compensated_with_temp_only() {
-        // Test temperature compensation in estimate_soc_compensated (lines 135-137)
+        // Test temperature compensation in estimate_soc_compensated
         let config = EstimatorConfig::default()
             .with_temperature_compensation()
             .with_nominal_temperature(25.0)
-            .with_temperature_coefficient(0.0005);
+            .with_temperature_coefficient(0.005); // 0.5% per °C
 
         let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
 
-        // At cold temperature (0°C), SOC should appear higher
+        // At cold temperature (0°C), SOC should appear LOWER (reduced capacity)
         let soc_cold = estimator.estimate_soc_compensated(3.7, 0.0).unwrap();
         let soc_normal = estimator.estimate_soc_compensated(3.7, 25.0).unwrap();
 
         assert!(
-            soc_cold > soc_normal,
-            "Cold temperature should increase apparent SOC"
+            soc_cold < soc_normal,
+            "Cold temperature should decrease SOC due to reduced capacity"
         );
     }
 
@@ -539,13 +545,14 @@ mod tests {
     #[test]
     fn test_estimate_soc_compensated_with_temp() {
         let estimator =
-            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 25.0, 0.0005);
+            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 25.0, 0.005);
 
         let base_soc = estimator.estimate_soc(3.7).unwrap();
         let compensated_soc = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
 
-        // At lower temperature, SOC should appear higher
-        assert!(compensated_soc > base_soc);
+        // At lower temperature (20°C vs 25°C nominal), SOC should appear LOWER
+        // because cold reduces battery capacity
+        assert!(compensated_soc < base_soc, "Cold should reduce SOC");
     }
 
     #[test]

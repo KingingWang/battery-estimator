@@ -188,12 +188,28 @@ impl Curve {
 
         let voltage_mv = (voltage * 1000.0) as i32;
 
-        // Boundary checks
+        // Boundary checks - find the actual min/max SOC points
         if voltage_mv >= self.max_voltage_mv as i32 {
-            return Ok(self.points[(self.len - 1) as usize].soc());
+            // Find the point with max voltage and return its SOC
+            let mut max_soc = self.points[0].soc();
+            for i in 0..self.len as usize {
+                if self.points[i].voltage_mv == self.max_voltage_mv {
+                    max_soc = self.points[i].soc();
+                    break;
+                }
+            }
+            return Ok(max_soc);
         }
         if voltage_mv <= self.min_voltage_mv as i32 {
-            return Ok(self.points[0].soc());
+            // Find the point with min voltage and return its SOC
+            let mut min_soc = self.points[0].soc();
+            for i in 0..self.len as usize {
+                if self.points[i].voltage_mv == self.min_voltage_mv {
+                    min_soc = self.points[i].soc();
+                    break;
+                }
+            }
+            return Ok(min_soc);
         }
 
         // Linear search for interpolation segment

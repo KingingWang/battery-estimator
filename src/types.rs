@@ -5,6 +5,20 @@
 //! - [`BatteryChemistry`] - Enumeration of supported battery types
 //! - [`CurvePoint`] - Individual voltage-SOC data point for curves
 
+/// Const-compatible check for finite f32 values
+///
+/// Returns true if the value is neither NaN nor infinite.
+#[inline]
+const fn is_finite_const(value: f32) -> bool {
+    // A value is finite if it's not NaN and not infinite
+    // NaN: exponent all 1s, mantissa non-zero
+    // Infinity: exponent all 1s, mantissa zero
+    // We check if exponent bits are not all 1s (0xFF)
+    let bits = value.to_bits();
+    let exponent = (bits >> 23) & 0xFF;
+    exponent != 0xFF
+}
+
 /// Battery chemistry types supported by the library
 ///
 /// Each variant represents a specific battery chemistry with its own
@@ -38,7 +52,7 @@
 /// - **Lower full charge** (4.1V vs 4.2V) - Reduces stress on battery
 /// - **Higher cutoff** (3.4V vs 3.2V) - Prevents deep discharge
 /// - **Benefit**: Extended cycle life at cost of reduced capacity
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BatteryChemistry {
     /// Standard Lithium Polymer battery
     ///
@@ -106,7 +120,7 @@ pub enum BatteryChemistry {
 /// // Create from tuple
 /// let point2: CurvePoint = (3.8, 75.0).into();
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CurvePoint {
     /// Voltage in millivolts (mV)
     ///
@@ -126,8 +140,15 @@ impl CurvePoint {
     ///
     /// # Arguments
     ///
-    /// * `voltage` - Voltage in volts (e.g., 3.7)
-    /// * `soc` - State of charge in percent (e.g., 50.0)
+    /// * `voltage` - Voltage in volts (e.g., 3.7). Must be non-negative and finite.
+    /// * `soc` - State of charge in percent (e.g., 50.0). Must be in range 0.0-100.0.
+    ///
+    /// # Input Handling
+    ///
+    /// - Negative voltages are clamped to 0.0
+    /// - NaN/Infinity voltages are treated as 0.0
+    /// - SOC values are clamped to 0.0-100.0 range
+    /// - NaN/Infinity SOC values are treated as 0.0
     ///
     /// # Examples
     ///
@@ -135,9 +156,58 @@ impl CurvePoint {
     /// use battery_estimator::CurvePoint;
     ///
     /// let point = CurvePoint::new(3.7, 50.0);
+    /// assert_eq!(point.voltage(), 3.7);
+    /// assert_eq!(point.soc(), 50.0);
+    ///
+    /// // Negative voltage is clamped to 0
+    /// let clamped = CurvePoint::new(-1.0, 50.0);
+    /// assert_eq!(clamped.voltage(), 0.0);
     /// ```
     #[inline]
     pub const fn new(voltage: f32, soc: f32) -> Self {
+        // Validate and clamp voltage (must be non-negative, max 65.535V for u16)
+        let safe_voltage = if voltage < 0.0 || !is_finite_const(voltage) {
+            0.0
+        } else if voltage > 65.535 {
+            65.535
+        } else {
+            voltage
+        };
+
+        // Validate and clamp SOC (must be 0-100%)
+        let safe_soc = if soc < 0.0 || !is_finite_const(soc) {
+            0.0
+        } else if soc > 100.0 {
+            100.0
+        } else {
+            soc
+        };
+
+        Self {
+            voltage_mv: (safe_voltage * 1000.0) as u16,
+            soc_tenth: (safe_soc * 10.0) as u16,
+        }
+    }
+
+    /// Creates a new curve point without validation (for performance-critical code)
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `voltage` is non-negative and <= 65.535
+    /// - `soc` is in range 0.0-100.0
+    /// - Both values are finite (not NaN or Infinity)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::CurvePoint;
+    ///
+    /// // Only use when you're certain the values are valid
+    /// let point = CurvePoint::new_unchecked(3.7, 50.0);
+    /// ```
+    #[inline]
+    pub const fn new_unchecked(voltage: f32, soc: f32) -> Self {
         Self {
             voltage_mv: (voltage * 1000.0) as u16,
             soc_tenth: (soc * 10.0) as u16,
@@ -312,13 +382,17 @@ mod tests {
     #[test]
     fn test_curve_point_extreme_soc() {
         // Test SOC values beyond normal range
-        // Note: SOC is stored as u16, so negative values wrap around
+        // With input validation, negative SOC is clamped to 0
         let point1 = CurvePoint::new(3.7, -10.0);
-        // Negative SOC wraps to positive due to u16 storage
-        assert!(point1.soc() >= 0.0);
+        assert_eq!(point1.soc(), 0.0, "Negative SOC should be clamped to 0");
 
+        // SOC above 100% is clamped to 100%
         let point2 = CurvePoint::new(3.7, 150.0);
-        assert_eq!(point2.soc(), 150.0);
+        assert_eq!(
+            point2.soc(),
+            100.0,
+            "SOC above 100% should be clamped to 100%"
+        );
     }
 
     #[test]

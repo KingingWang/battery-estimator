@@ -8,14 +8,14 @@ A lightweight, `no_std` compatible Rust library for estimating battery State of 
 
 ## Features
 
-- ✅ **Minimal dependencies** - This crate only depends on `thiserror` for error handling  
+- ✅ **Minimal dependencies** - Only depends on `thiserror` for error handling (no runtime overhead)
 - ✅ **`no_std` compatible** - Perfect for embedded systems and microcontrollers
 - ✅ **No heap allocations** - Uses only stack memory and fixed-size arrays
-- ✅ **Multiple battery chemistries** - Built-in support for LiPo, LiFePO4, Li-Ion
-- ✅ **Temperature compensation** - Correct SOC readings based on temperature
+- ✅ **Multiple battery chemistries** - Built-in support for LiPo, LiFePO4, Li-Ion, and conservative curves
+- ✅ **Temperature compensation** - Correct SOC readings based on temperature effects
 - ✅ **Aging compensation** - Adjust for battery capacity degradation over time
 - ✅ **Custom voltage curves** - Define your own voltage-SOC relationships
-- ✅ **Conservative battery curves** - Extended battery life with conservative charge/discharge thresholds
+- ✅ **Input validation** - Safe handling of invalid inputs (NaN, Infinity, negative values)
 
 ## Installation
 
@@ -55,7 +55,7 @@ fn main() {
     let estimator = SocEstimator::with_temperature_compensation(
         BatteryChemistry::LiPo,
         25.0,  // Nominal temperature (°C)
-        0.0005 // Temperature coefficient
+        0.005  // Temperature coefficient (0.5% capacity loss per °C below nominal)
     );
     
     // Estimate SOC at 3.7V with current temperature of 20°C
@@ -142,9 +142,9 @@ fn main() {
     let estimator = SocEstimator::with_all_compensation(
         BatteryChemistry::LiPo,
         25.0,  // Nominal temperature
-        0.0005, // Temperature coefficient
+        0.005, // Temperature coefficient (0.5% capacity loss per °C below nominal)
         2.0,   // Battery age in years
-        0.02   // Aging factor
+        0.02   // Aging factor (2% capacity loss per year)
     );
     
     match estimator.estimate_soc_compensated(3.7, 20.0) {
@@ -166,6 +166,7 @@ The library is designed for minimal memory usage:
 - **Fast estimation**: O(n) where n is the number of curve points (typically 8-12)
 - **Deterministic execution time**: No dynamic memory allocation
 - **Linear search**: Efficient for typical battery curves with limited points
+- **Const-friendly**: Curve creation and validation use `const fn` for compile-time safety
 
 ## API Documentation
 

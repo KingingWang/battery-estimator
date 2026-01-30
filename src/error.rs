@@ -24,7 +24,7 @@ use thiserror::Error;
 ///     Err(e) => eprintln!("Error: {}", e),
 /// }
 /// ```
-#[derive(Error, Debug, Clone, Copy, PartialEq)]
+#[derive(Error, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Error {
     /// Voltage value is outside the valid range for the battery curve
     ///

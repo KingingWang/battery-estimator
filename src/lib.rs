@@ -6,7 +6,7 @@
 //!
 //! ## Features
 //!
-//! - **Zero dependencies** - No external crates required
+//! - **Minimal dependencies** - Only depends on `thiserror` for error handling
 //! - **`no_std` compatible** - Works in embedded environments
 //! - **No heap allocations** - Uses only stack memory and fixed-size arrays
 //! - **Multiple battery chemistries** - Built-in support for LiPo, LiFePO4, Li-Ion
