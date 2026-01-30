@@ -297,10 +297,7 @@ mod tests {
         assert_eq!(compensate_temperature(50.0, f32::NAN, 25.0, 0.005), 50.0);
         assert_eq!(compensate_temperature(50.0, 25.0, f32::NAN, 0.005), 50.0);
         assert_eq!(compensate_temperature(50.0, 25.0, 25.0, f32::NAN), 50.0);
-        assert_eq!(
-            compensate_temperature(f32::NAN, 25.0, 25.0, 0.005).is_nan(),
-            true
-        );
+        assert!(compensate_temperature(f32::NAN, 25.0, 25.0, 0.005).is_nan());
 
         // Infinity should return original SOC
         assert_eq!(
