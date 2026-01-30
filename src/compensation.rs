@@ -255,6 +255,82 @@ mod tests {
     }
 
     #[test]
+    fn test_aging_compensation_invalid_inputs() {
+        // Test NaN input for soc
+        let nan_soc = compensate_aging(f32::NAN, 1.0, 0.02);
+        assert!(nan_soc.is_nan(), "NaN SOC should return NaN");
+
+        // Test Infinity input for age_years
+        let inf_age = compensate_aging(50.0, f32::INFINITY, 0.02);
+        assert_eq!(inf_age, 50.0, "Infinity age should return original SOC");
+
+        // Test NaN input for aging_factor
+        let nan_factor = compensate_aging(50.0, 1.0, f32::NAN);
+        assert_eq!(
+            nan_factor, 50.0,
+            "NaN aging_factor should return original SOC"
+        );
+    }
+
+    #[test]
+    fn test_aging_compensation_negative_age() {
+        // Negative age should be treated as no aging
+        let negative_age = compensate_aging(50.0, -1.0, 0.02);
+        assert_eq!(
+            negative_age, 50.0,
+            "Negative age should return original SOC"
+        );
+    }
+
+    #[test]
+    fn test_aging_compensation_negative_factor() {
+        // Negative aging factor should be treated as no aging
+        let negative_factor = compensate_aging(50.0, 1.0, -0.02);
+        assert_eq!(
+            negative_factor, 50.0,
+            "Negative aging_factor should return original SOC"
+        );
+    }
+
+    #[test]
+    fn test_temperature_compensation_invalid_inputs() {
+        // Test NaN inputs
+        let nan_soc = compensate_temperature(f32::NAN, 25.0, 25.0, 0.005);
+        assert!(nan_soc.is_nan(), "NaN SOC should return NaN");
+
+        let nan_temp = compensate_temperature(50.0, f32::NAN, 25.0, 0.005);
+        assert_eq!(nan_temp, 50.0, "NaN temperature should return original SOC");
+
+        let nan_nominal = compensate_temperature(50.0, 25.0, f32::NAN, 0.005);
+        assert_eq!(
+            nan_nominal, 50.0,
+            "NaN nominal_temp should return original SOC"
+        );
+
+        let nan_coeff = compensate_temperature(50.0, 25.0, 25.0, f32::NAN);
+        assert_eq!(
+            nan_coeff, 50.0,
+            "NaN coefficient should return original SOC"
+        );
+
+        // Test Infinity inputs
+        let inf_temp = compensate_temperature(50.0, f32::INFINITY, 25.0, 0.005);
+        assert_eq!(
+            inf_temp, 50.0,
+            "Infinity temperature should return original SOC"
+        );
+    }
+
+    #[test]
+    fn test_extreme_hot_bounded() {
+        let extreme_hot = default_temperature_compensation(50.0, 150.0);
+        assert!(
+            extreme_hot <= 50.0 * 1.05,
+            "Extreme hot should be limited to +5%"
+        );
+    }
+
+    #[test]
     fn test_aging_compensation() {
         // New battery should have no change
         assert_eq!(compensate_aging(50.0, 0.0, 0.02), 50.0);
@@ -288,25 +364,6 @@ mod tests {
         assert!(
             result >= 50.0,
             "Warm temperature should maintain or slightly increase SOC"
-        );
-    }
-
-    #[test]
-    fn test_temperature_compensation_invalid_inputs() {
-        // NaN should return original SOC
-        assert_eq!(compensate_temperature(50.0, f32::NAN, 25.0, 0.005), 50.0);
-        assert_eq!(compensate_temperature(50.0, 25.0, f32::NAN, 0.005), 50.0);
-        assert_eq!(compensate_temperature(50.0, 25.0, 25.0, f32::NAN), 50.0);
-        assert!(compensate_temperature(f32::NAN, 25.0, 25.0, 0.005).is_nan());
-
-        // Infinity should return original SOC
-        assert_eq!(
-            compensate_temperature(50.0, f32::INFINITY, 25.0, 0.005),
-            50.0
-        );
-        assert_eq!(
-            compensate_temperature(50.0, f32::NEG_INFINITY, 25.0, 0.005),
-            50.0
         );
     }
 

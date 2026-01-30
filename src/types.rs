@@ -402,4 +402,64 @@ mod tests {
         // Should be stored and retrieved accurately
         assert!((point.voltage() - 3.715).abs() < 0.001);
     }
+
+    #[test]
+    fn test_curve_point_nan_voltage() {
+        // Test NaN voltage is handled (line 172)
+        let point = CurvePoint::new(f32::NAN, 50.0);
+        assert_eq!(point.voltage(), 0.0, "NaN voltage should be clamped to 0");
+    }
+
+    #[test]
+    fn test_curve_point_infinity_voltage() {
+        // Test Infinity voltage is handled (line 172)
+        // Non-finite values are treated as invalid and clamped to 0
+        let point = CurvePoint::new(f32::INFINITY, 50.0);
+        assert_eq!(
+            point.voltage(),
+            0.0,
+            "Infinity voltage should be treated as invalid and set to 0"
+        );
+    }
+
+    #[test]
+    fn test_curve_point_nan_soc() {
+        // Test NaN SOC is handled (line 210)
+        let point = CurvePoint::new(3.7, f32::NAN);
+        assert_eq!(point.soc(), 0.0, "NaN SOC should be clamped to 0");
+    }
+
+    #[test]
+    fn test_curve_point_infinity_soc() {
+        // Test Infinity SOC is handled (lines 212-213)
+        // Non-finite values are treated as invalid and clamped to 0
+        let point = CurvePoint::new(3.7, f32::INFINITY);
+        assert_eq!(
+            point.soc(),
+            0.0,
+            "Infinity SOC should be treated as invalid and set to 0"
+        );
+    }
+
+    #[test]
+    fn test_curve_point_neg_infinity_voltage() {
+        // Test negative Infinity voltage
+        let point = CurvePoint::new(f32::NEG_INFINITY, 50.0);
+        assert_eq!(
+            point.voltage(),
+            0.0,
+            "Negative Infinity voltage should be clamped to 0"
+        );
+    }
+
+    #[test]
+    fn test_curve_point_neg_infinity_soc() {
+        // Test negative Infinity SOC
+        let point = CurvePoint::new(3.7, f32::NEG_INFINITY);
+        assert_eq!(
+            point.soc(),
+            0.0,
+            "Negative Infinity SOC should be clamped to 0"
+        );
+    }
 }
