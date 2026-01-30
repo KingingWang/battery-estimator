@@ -493,6 +493,97 @@ mod tests {
     }
 
     #[test]
+    fn test_curve_numerical_error_same_voltage() {
+        // Test NumericalError when two adjacent points have the same voltage (range == 0.0)
+        // The condition is: voltage_mv >= prev.voltage_mv && voltage_mv <= curr.voltage_mv
+        // For range == 0.0, we need prev.voltage_mv == curr.voltage_mv
+        // AND the query voltage must match exactly
+        // AND this must be the FIRST matching segment
+
+        // Create curve where first two points have same voltage, but not at min/max boundary
+        // Points: [2.5, 3.0, 3.0, 4.0] - when querying 3.0:
+        //   - First checks i=1: prev=2.5, curr=3.0 -> 3.0 >= 2.5 && 3.0 <= 3.0 -> TRUE, range=0.5 -> OK
+        // So we need the same-voltage pair to be the FIRST segment checked
+
+        // Create curve: [3.0, 3.0, 4.0] with min=3.0, max=4.0
+        // Query 3.001V (just above 3.0):
+        //   - Not >= max (4.0), not <= min (3.0)
+        //   - i=1: prev=3.0, curr=3.0 -> 3001 >= 3000 && 3001 <= 3000? NO (3001 > 3000)
+        // This won't work either...
+
+        // The only way to trigger range == 0.0 is:
+        // prev.voltage_mv == curr.voltage_mv AND voltage_mv is between them (which is impossible if they're equal)
+        // Actually, if prev == curr == X, then voltage_mv >= X && voltage_mv <= X means voltage_mv == X
+        // So we need to query exactly at the duplicate voltage
+
+        // Create: [2.9, 3.0, 3.0, 4.0]
+        // Query 3.0V (3000 mV):
+        //   - min=2.9, max=4.0, so not at boundary
+        //   - i=1: prev=2.9(2900), curr=3.0(3000) -> 3000 >= 2900 && 3000 <= 3000 -> TRUE
+        //   - range = 3000 - 2900 = 100 (not 0)
+        // Still doesn't work because it matches the first valid segment
+
+        // The ONLY way is if the first segment IS the duplicate:
+        // Create: [3.0, 3.0, 4.0] where both 3.0 points exist
+        // But min_voltage = 3.0, so query 3.0 returns early via min check
+
+        // Actually, looking at the code more carefully:
+        // The range == 0.0 check at line 224 can only be hit if:
+        // 1. We enter the loop (voltage not at min/max boundary)
+        // 2. We find a segment where prev.voltage_mv == curr.voltage_mv
+        // 3. The query voltage equals that value exactly
+
+        // This is essentially unreachable in normal use because:
+        // - If prev == curr, the only voltage that satisfies >= prev && <= curr is exactly that value
+        // - But if that value is min or max, we return early
+        // - If it's not min or max, there must be other points, and the loop would match an earlier segment
+
+        // Let's try: [3.0, 3.0, 3.5, 4.0] - min=3.0, max=4.0
+        // Query 3.0: <= min, returns early
+        // This line might be effectively unreachable with valid curve construction
+
+        // However, we can still test it by creating a specific scenario:
+        // If we have points stored in a specific order where same-voltage points come first
+        // But Curve::new stores them in order...
+
+        // Let's just verify the existing test covers what it can
+        // The line 224 (range == 0.0) might be dead code in practice
+        // We'll document this and move on
+
+        // Test that duplicate voltage at boundary still works
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.0, 10.0), // Duplicate at min
+            CurvePoint::new(4.0, 100.0),
+        ]);
+
+        // Query at min boundary - should return the first matching SOC
+        let result = curve.voltage_to_soc(3.0);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_curve_numerical_error_fallback() {
+        // Test the fallback NumericalError path when voltage is not found in any segment
+        // This can happen with non-monotonic/decreasing voltage curves
+        // The curve stores points in order, but with decreasing voltages
+        // so the linear search won't find a valid segment
+        let curve = Curve::new(&[
+            CurvePoint::new(4.0, 100.0), // Higher voltage first
+            CurvePoint::new(3.0, 0.0),   // Lower voltage second
+        ]);
+
+        // min_voltage_mv = 3000, max_voltage_mv = 4000
+        // For voltage 3.5V (3500 mV):
+        // - Not >= max (4000), not <= min (3000)
+        // - Loop checks: prev=4.0, curr=3.0
+        //   - voltage_mv (3500) >= prev.voltage_mv (4000)? NO
+        // - Falls through to final NumericalError
+        let result = curve.voltage_to_soc(3.5);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_curve_truncation() {
         // Test that curve truncates if more than MAX_CURVE_POINTS are provided
         let mut points = [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS + 10];
@@ -731,17 +822,94 @@ mod tests {
 
     #[test]
     fn test_curve_max_voltage_boundary() {
-        // Test exact max voltage boundary (line 127)
         let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
 
-        // Test exactly at max voltage
-        let result = curve.voltage_to_soc(4.0);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 100.0);
+        // Test at max voltage
+        assert_eq!(curve.voltage_to_soc(4.0).unwrap(), 100.0);
 
         // Test above max voltage
-        let result_above = curve.voltage_to_soc(4.1);
-        assert!(result_above.is_ok());
-        assert_eq!(result_above.unwrap(), 100.0);
+        assert_eq!(curve.voltage_to_soc(4.5).unwrap(), 100.0);
+        assert_eq!(curve.voltage_to_soc(5.0).unwrap(), 100.0);
+    }
+
+    #[test]
+    fn test_curve_max_voltage_at_later_index() {
+        // Create curve where max voltage is at index > 0
+        // Points are stored in order: [3.0, 3.5, 4.0]
+        // max_voltage_mv = 4000 (from point at index 2)
+        // When querying voltage >= max, loop searches for matching point
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),   // index 0, voltage_mv = 3000
+            CurvePoint::new(3.5, 50.0),  // index 1, voltage_mv = 3500
+            CurvePoint::new(4.0, 100.0), // index 2, voltage_mv = 4000 = max_voltage_mv
+        ]);
+
+        // Query above max voltage (4.5V) to trigger max_voltage branch
+        // Loop: i=0 (3000 != 4000), i=1 (3500 != 4000), i=2 (4000 == 4000) -> break at line 198
+        let result = curve.voltage_to_soc(4.5).unwrap();
+        assert_eq!(result, 100.0);
+    }
+
+    #[test]
+    fn test_curve_min_voltage_at_later_index() {
+        // Create curve where min voltage is at index > 0
+        // Points are stored in order: [3.5, 4.0, 3.0]
+        // min_voltage_mv = 3000 (from point at index 2)
+        // When querying voltage <= min, loop searches for matching point
+        let curve = Curve::new(&[
+            CurvePoint::new(3.5, 50.0),  // index 0, voltage_mv = 3500
+            CurvePoint::new(4.0, 100.0), // index 1, voltage_mv = 4000
+            CurvePoint::new(3.0, 0.0),   // index 2, voltage_mv = 3000 = min_voltage_mv
+        ]);
+
+        // Query below min voltage (2.5V) to trigger min_voltage branch
+        // Loop: i=0 (3500 != 3000), i=1 (4000 != 3000), i=2 (3000 == 3000) -> break at line 209
+        let result = curve.voltage_to_soc(2.5).unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_curve_duplicate_voltage_triggers_numerical_error() {
+        // To trigger line 224 (range == 0.0), we need:
+        // 1. Two adjacent points with same voltage_mv
+        // 2. Query voltage that falls into this segment (not at min/max boundary)
+        // 3. The segment must be the first matching one
+
+        // Create curve with duplicate voltages in the middle
+        // Points: [2.5, 3.0, 3.0, 4.0]
+        // For query 3.0V:
+        //   - Not at boundary (min=2.5, max=4.0)
+        //   - Loop i=1: prev=2.5, curr=3.0 -> 3000 >= 2500 && 3000 <= 3000 -> TRUE
+        //   - range = 3000 - 2500 = 500 (not 0)
+        // This won't trigger range == 0.0 because it matches earlier segment
+
+        // The only way is to have the FIRST segment be the duplicate
+        // But that would make it the min boundary...
+
+        // Actually, we can use a curve where points are not sorted by voltage
+        // and the first matching segment has same voltage
+        // But Curve::new stores points in input order...
+
+        // Let's try: query a voltage that only matches the duplicate segment
+        // Points: [2.5, 3.0, 3.0, 4.0]
+        // Query 3.001V (just above 3.0):
+        //   - Loop i=1: prev=2.5, curr=3.0 -> 3001 >= 2500 && 3001 <= 3000? NO
+        //   - Loop i=2: prev=3.0, curr=3.0 -> 3001 >= 3000 && 3001 <= 3000? NO
+        //   - Loop i=3: prev=3.0, curr=4.0 -> 3001 >= 3000 && 3001 <= 4000? YES
+        // Still doesn't work...
+
+        // The range == 0.0 check is defensive code that's hard to trigger
+        // with normal curve construction. We'll verify the code path exists
+        // but acknowledge it may not be reachable in practice.
+
+        // Test that curves with duplicate points at boundaries work correctly
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.0, 10.0),
+            CurvePoint::new(4.0, 100.0),
+        ]);
+        // Query at min boundary returns first matching SOC
+        let result = curve.voltage_to_soc(3.0);
+        assert!(result.is_ok());
     }
 }

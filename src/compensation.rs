@@ -192,7 +192,6 @@ pub fn default_temperature_compensation(soc: f32, temperature: f32) -> f32 {
 /// # Returns
 ///
 /// Clamped value within [min, max] range
-#[inline(always)]
 fn clamp(value: f32, min: f32, max: f32) -> f32 {
     value.clamp(min, max)
 }

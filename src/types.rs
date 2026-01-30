@@ -351,6 +351,68 @@ mod tests {
     }
 
     #[test]
+    fn test_curve_point_voltage_exceeds_max() {
+        // Test voltage > 65.535 is clamped to 65.535
+        let point = CurvePoint::new(100.0, 50.0);
+        assert_eq!(point.voltage(), 65.535);
+    }
+
+    #[test]
+    fn test_curve_point_soc_exceeds_max() {
+        // Test SOC > 100.0 is clamped to 100.0
+        let point = CurvePoint::new(3.7, 150.0);
+        assert_eq!(point.soc(), 100.0);
+    }
+
+    #[test]
+    fn test_curve_point_nan_values() {
+        // Test NaN voltage is treated as 0.0
+        let point = CurvePoint::new(f32::NAN, 50.0);
+        assert_eq!(point.voltage(), 0.0);
+
+        // Test NaN SOC is treated as 0.0
+        let point2 = CurvePoint::new(3.7, f32::NAN);
+        assert_eq!(point2.soc(), 0.0);
+    }
+
+    #[test]
+    fn test_curve_point_infinity_values() {
+        // Test infinity voltage is treated as 0.0
+        let point = CurvePoint::new(f32::INFINITY, 50.0);
+        assert_eq!(point.voltage(), 0.0);
+
+        // Test infinity SOC is treated as 0.0
+        let point2 = CurvePoint::new(3.7, f32::INFINITY);
+        assert_eq!(point2.soc(), 0.0);
+    }
+
+    #[test]
+    fn test_curve_point_from_trait() {
+        // Explicitly test the From trait implementation
+        let tuple = (3.9, 80.0);
+        let point = CurvePoint::from(tuple);
+        assert_eq!(point.voltage(), 3.9);
+        assert_eq!(point.soc(), 80.0);
+    }
+
+    #[test]
+    fn test_curve_point_new_unchecked() {
+        // Test the new_unchecked function
+        let point = CurvePoint::new_unchecked(3.8, 60.0);
+        assert_eq!(point.voltage(), 3.8);
+        assert_eq!(point.soc(), 60.0);
+
+        // Test with edge values
+        let point2 = CurvePoint::new_unchecked(0.0, 0.0);
+        assert_eq!(point2.voltage(), 0.0);
+        assert_eq!(point2.soc(), 0.0);
+
+        let point3 = CurvePoint::new_unchecked(65.535, 100.0);
+        assert_eq!(point3.voltage(), 65.535);
+        assert_eq!(point3.soc(), 100.0);
+    }
+
+    #[test]
     fn test_curve_point_internal_representation() {
         let point = CurvePoint::new(3.7, 50.0);
         // Voltage should be stored in millivolts
