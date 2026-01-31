@@ -77,13 +77,11 @@ impl EstimatorConfig {
     }
 
     /// Whether temperature compensation is enabled
-    #[inline]
     pub const fn enable_temperature_compensation(self) -> bool {
         (self.flags & 0x01) != 0
     }
 
     /// Whether aging compensation is enabled
-    #[inline]
     pub const fn enable_aging_compensation(self) -> bool {
         (self.flags & 0x02) != 0
     }
@@ -170,7 +168,6 @@ impl SocEstimator {
     }
 
     /// Estimate SOC (using configuration settings)
-    #[inline]
     pub fn estimate_soc_compensated(&self, voltage: f32, temperature: f32) -> Result<f32, Error> {
         let base_soc = self.curve.voltage_to_soc(voltage)?;
         let mut soc = base_soc;
@@ -212,7 +209,6 @@ impl SocEstimator {
     }
 
     /// Enable temperature compensation
-    #[inline]
     pub fn enable_temperature_compensation(&mut self, nominal_temp: f32, coefficient: f32) {
         self.config = self
             .config
@@ -222,7 +218,6 @@ impl SocEstimator {
     }
 
     /// Enable aging compensation
-    #[inline]
     pub fn enable_aging_compensation(&mut self, age_years: f32, aging_factor: f32) {
         self.config = self
             .config
@@ -232,7 +227,6 @@ impl SocEstimator {
     }
 
     /// Disable all compensation
-    #[inline]
     pub fn disable_all_compensation(&mut self) {
         self.config = EstimatorConfig::default();
     }
@@ -874,5 +868,75 @@ mod tests {
         let warm_soc = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
 
         assert!(cold_soc < warm_soc, "Cold temperature should reduce SOC");
+    }
+
+    #[test]
+    fn test_estimator_config_enable_methods_direct() {
+        // Test lines 81, 87 - enable_temperature_compensation and enable_aging_compensation
+        // These are const fn methods on EstimatorConfig
+
+        // Test enable_temperature_compensation (line 81)
+        let config_temp = EstimatorConfig::default().with_temperature_compensation();
+        assert!(config_temp.enable_temperature_compensation());
+
+        // Test enable_aging_compensation (line 87)
+        let config_aging = EstimatorConfig::default().with_aging_compensation();
+        assert!(config_aging.enable_aging_compensation());
+
+        // Test both enabled
+        let config_both = EstimatorConfig::default()
+            .with_temperature_compensation()
+            .with_aging_compensation();
+        assert!(config_both.enable_temperature_compensation());
+        assert!(config_both.enable_aging_compensation());
+    }
+
+    #[test]
+    fn test_estimator_enable_temperature_method_line_218() {
+        // Test line 218 - self.config in enable_temperature_compensation
+        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
+
+        // This line accesses self.config to build a new config
+        estimator.enable_temperature_compensation(22.5, 0.006);
+
+        assert!(estimator.config().enable_temperature_compensation());
+        assert_eq!(estimator.config().nominal_temperature, 22.5);
+        assert_eq!(estimator.config().temperature_coefficient, 0.006);
+    }
+
+    #[test]
+    fn test_estimator_enable_aging_method_line_228() {
+        // Test line 228 - self.config in enable_aging_compensation
+        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
+
+        // This line accesses self.config to build a new config
+        estimator.enable_aging_compensation(1.5, 0.015);
+
+        assert!(estimator.config().enable_aging_compensation());
+        assert_eq!(estimator.config().age_years, 1.5);
+        assert_eq!(estimator.config().aging_factor, 0.015);
+    }
+
+    #[test]
+    fn test_estimate_soc_compensated_temperature_line_182() {
+        // Test line 182 - temperature parameter in estimate_soc_compensated
+        let config = EstimatorConfig::default()
+            .with_temperature_compensation()
+            .with_nominal_temperature(25.0)
+            .with_temperature_coefficient(0.005);
+
+        let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
+
+        // Test with various temperatures to ensure the temperature parameter (line 182) is passed
+        let temp_neg10 = estimator.estimate_soc_compensated(3.7, -10.0).unwrap();
+        let temp_0 = estimator.estimate_soc_compensated(3.7, 0.0).unwrap();
+        let temp_25 = estimator.estimate_soc_compensated(3.7, 25.0).unwrap();
+        let temp_50 = estimator.estimate_soc_compensated(3.7, 50.0).unwrap();
+
+        // Cold temperatures should show lower SOC
+        assert!(temp_neg10 < temp_0);
+        assert!(temp_0 < temp_25);
+        // Hot temperature should show higher SOC
+        assert!(temp_50 >= temp_25);
     }
 }

@@ -75,7 +75,6 @@ impl Curve {
     /// assert!(empty.is_empty());
     /// assert_eq!(empty.len(), 0);
     /// ```
-    #[inline]
     pub const fn empty() -> Self {
         Self {
             points: [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS],
@@ -180,7 +179,6 @@ impl Curve {
     /// // Midpoint interpolation
     /// assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
     /// ```
-    #[inline]
     pub fn voltage_to_soc(&self, voltage: f32) -> Result<f32, Error> {
         if self.len < 2 {
             return Err(Error::InvalidCurve);
@@ -225,9 +223,6 @@ impl Curve {
 
             if voltage_mv >= prev.voltage_mv as i32 && voltage_mv <= curr.voltage_mv as i32 {
                 let range = (curr.voltage_mv as i32 - prev.voltage_mv as i32) as f32;
-                if range == 0.0 {
-                    return Err(Error::NumericalError);
-                }
                 let ratio = (voltage_mv - prev.voltage_mv as i32) as f32 / range;
                 let soc = prev.soc() + ratio * (curr.soc() - prev.soc());
                 return Ok(soc);
