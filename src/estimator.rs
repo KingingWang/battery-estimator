@@ -116,7 +116,7 @@ impl SocEstimator {
 
         Self {
             curve,
-            config: EstimatorConfig::default(), // 现在这是const函数
+            config: EstimatorConfig::default(), // This is now a const function
         }
     }
 
@@ -270,7 +270,7 @@ impl SocEstimator {
         Self::with_config(chemistry, config)
     }
 
-    /// 创建带所有补偿的估算器
+    /// Create estimator with all compensation enabled
     #[inline]
     pub fn with_all_compensation(
         chemistry: BatteryChemistry,

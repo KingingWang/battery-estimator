@@ -21,30 +21,11 @@ use thiserror::Error;
 ///     Ok(soc) => println!("SOC: {:.1}%", soc),
 ///     Err(Error::InvalidCurve) => eprintln!("Invalid battery curve"),
 ///     Err(Error::NumericalError) => eprintln!("Calculation error"),
-///     Err(e) => eprintln!("Error: {}", e),
+///     Err(Error::InvalidTemperature) => eprintln!("Invalid temperature"),
 /// }
 /// ```
 #[derive(Error, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Error {
-    /// Voltage value is outside the valid range for the battery curve
-    ///
-    /// This error occurs when the input voltage is either:
-    /// - Below the minimum voltage of the curve
-    /// - Above the maximum voltage of the curve
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use battery_estimator::{BatteryChemistry, SocEstimator, Error};
-    ///
-    /// let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-    ///
-    /// // Note: The estimator actually clamps values to the curve range,
-    /// // so this error is typically not encountered in normal use
-    /// ```
-    #[error("Voltage out of valid range")]
-    VoltageOutOfRange,
-
     /// The voltage curve data is invalid
     ///
     /// This error occurs when:
@@ -118,11 +99,6 @@ mod tests {
         // We can test that the Display implementation compiles and works
         let mut buffer = [0u8; 64];
 
-        // Test VoltageOutOfRange
-        let mut writer = BufferWriter::new(&mut buffer);
-        write!(writer, "{}", Error::VoltageOutOfRange).unwrap();
-        assert_eq!(writer.as_str(), "Voltage out of valid range");
-
         // Test InvalidCurve
         let mut writer = BufferWriter::new(&mut buffer);
         write!(writer, "{}", Error::InvalidCurve).unwrap();
@@ -141,12 +117,10 @@ mod tests {
 
     #[test]
     fn test_error_equality() {
-        assert_eq!(Error::VoltageOutOfRange, Error::VoltageOutOfRange);
         assert_eq!(Error::InvalidCurve, Error::InvalidCurve);
         assert_eq!(Error::NumericalError, Error::NumericalError);
         assert_eq!(Error::InvalidTemperature, Error::InvalidTemperature);
 
-        assert_ne!(Error::VoltageOutOfRange, Error::InvalidCurve);
         assert_ne!(Error::InvalidCurve, Error::NumericalError);
     }
 
@@ -170,28 +144,23 @@ mod tests {
     fn test_error_all_variants() {
         // Test that all error variants can be created
         let errors = [
-            Error::VoltageOutOfRange,
             Error::InvalidCurve,
             Error::NumericalError,
             Error::InvalidTemperature,
         ];
-        assert_eq!(errors.len(), 4);
+        assert_eq!(errors.len(), 3);
     }
 
     #[test]
     fn test_error_variants_distinct() {
-        let error1 = Error::VoltageOutOfRange;
-        let error2 = Error::InvalidCurve;
-        let error3 = Error::NumericalError;
-        let error4 = Error::InvalidTemperature;
+        let error1 = Error::InvalidCurve;
+        let error2 = Error::NumericalError;
+        let error3 = Error::InvalidTemperature;
 
         // Verify all variants are distinct
         assert_ne!(error1, error2);
         assert_ne!(error2, error3);
-        assert_ne!(error3, error4);
         assert_ne!(error1, error3);
-        assert_ne!(error1, error4);
-        assert_ne!(error2, error4);
     }
 
     // Helper struct for testing Display in no-std
