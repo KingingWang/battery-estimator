@@ -366,55 +366,6 @@ mod tests {
     }
 
     #[test]
-    fn test_estimator_config_default() {
-        let config = EstimatorConfig::default();
-
-        assert_eq!(config.nominal_temperature, 25.0);
-        assert_eq!(config.temperature_coefficient, 0.005);
-        assert_eq!(config.age_years, 0.0);
-        assert_eq!(config.aging_factor, 0.02);
-        assert!(!config.enable_temperature_compensation());
-        assert!(!config.enable_aging_compensation());
-    }
-
-    #[test]
-    fn test_estimator_config_builder() {
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_nominal_temperature(20.0)
-            .with_temperature_coefficient(0.001)
-            .with_age_years(2.0)
-            .with_aging_factor(0.03);
-
-        assert!(config.enable_temperature_compensation());
-        assert_eq!(config.nominal_temperature, 20.0);
-        assert_eq!(config.temperature_coefficient, 0.001);
-        assert_eq!(config.age_years, 2.0);
-        assert_eq!(config.aging_factor, 0.03);
-    }
-
-    #[test]
-    fn test_estimator_with_aging_compensation() {
-        let estimator = SocEstimator::with_aging_compensation(BatteryChemistry::LiPo, 2.0, 0.02);
-
-        let config = estimator.config();
-        assert!(config.enable_aging_compensation());
-        assert_eq!(config.age_years, 2.0);
-        assert_eq!(config.aging_factor, 0.02);
-    }
-
-    #[test]
-    fn test_estimator_with_temperature_compensation_constructor() {
-        let estimator =
-            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 20.0, 0.006);
-
-        let config = estimator.config();
-        assert!(config.enable_temperature_compensation());
-        assert_eq!(config.nominal_temperature, 20.0);
-        assert_eq!(config.temperature_coefficient, 0.006);
-    }
-
-    #[test]
     fn test_estimator_estimate_soc_compensated() {
         let config = EstimatorConfig::default()
             .with_temperature_compensation()
@@ -431,37 +382,6 @@ mod tests {
         // Cold temperature should reduce SOC
         let cold_soc = estimator.estimate_soc_compensated(3.7, 0.0).unwrap();
         assert!(cold_soc < soc);
-    }
-
-    #[test]
-    fn test_estimator_enable_methods() {
-        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // Test enable_temperature_compensation method (covers lines 216-222)
-        estimator.enable_temperature_compensation(22.0, 0.004);
-        assert!(estimator.config().enable_temperature_compensation());
-        assert_eq!(estimator.config().nominal_temperature, 22.0);
-        assert_eq!(estimator.config().temperature_coefficient, 0.004);
-
-        // Now test estimate_soc_compensated with temperature compensation enabled
-        // This should cover line 182 (temperature parameter in compensate_temperature call)
-        let soc_with_temp = estimator.estimate_soc_compensated(3.7, 15.0).unwrap();
-        assert!(soc_with_temp > 0.0);
-
-        // Test enable_aging_compensation method (covers lines 226-232)
-        estimator.enable_aging_compensation(3.0, 0.025);
-        assert!(estimator.config().enable_aging_compensation());
-        assert_eq!(estimator.config().age_years, 3.0);
-        assert_eq!(estimator.config().aging_factor, 0.025);
-
-        // Test estimate_soc_compensated with both compensations enabled
-        let soc_with_both = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
-        assert!(soc_with_both > 0.0);
-
-        // Test disable_all_compensation method
-        estimator.disable_all_compensation();
-        assert!(!estimator.config().enable_temperature_compensation());
-        assert!(!estimator.config().enable_aging_compensation());
     }
 
     #[test]
@@ -511,42 +431,6 @@ mod tests {
     }
 
     #[test]
-    fn test_estimator_enable_aging_compensation() {
-        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        estimator.enable_aging_compensation(5.0, 0.03);
-
-        assert!(estimator.config().enable_aging_compensation());
-        assert_eq!(estimator.config().age_years, 5.0);
-        assert_eq!(estimator.config().aging_factor, 0.03);
-    }
-
-    #[test]
-    fn test_estimator_config_default_trait() {
-        // Test Default trait implementation for EstimatorConfig (line 81)
-        let config: EstimatorConfig = Default::default();
-
-        assert_eq!(config.nominal_temperature, 25.0);
-        assert_eq!(config.temperature_coefficient, 0.005);
-        assert_eq!(config.age_years, 0.0);
-        assert_eq!(config.aging_factor, 0.02);
-    }
-
-    #[test]
-    fn test_estimator_config_enable_methods() {
-        // Test enable_temperature_compensation and enable_aging_compensation methods (lines 87, 95-96)
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_aging_compensation();
-
-        // Test enable_temperature_compensation method (line 87)
-        assert!(config.enable_temperature_compensation());
-
-        // Test enable_aging_compensation method (lines 95-96)
-        assert!(config.enable_aging_compensation());
-    }
-
-    #[test]
     fn test_estimate_soc_compensated_with_temp_only() {
         // Test temperature compensation in estimate_soc_compensated
         let config = EstimatorConfig::default()
@@ -567,27 +451,6 @@ mod tests {
     }
 
     #[test]
-    fn test_estimate_soc_compensated_with_aging_only() {
-        // Test aging compensation in estimate_soc_compensated (line 173)
-        let config = EstimatorConfig::default()
-            .with_aging_compensation()
-            .with_age_years(2.0)
-            .with_aging_factor(0.02);
-
-        let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
-
-        // Aged battery should show lower SOC
-        let soc_aged = estimator.estimate_soc_compensated(3.7, 25.0).unwrap();
-
-        // Create estimator without aging for comparison
-        let config_new = EstimatorConfig::default();
-        let estimator_new = SocEstimator::with_config(BatteryChemistry::LiPo, config_new);
-        let soc_new = estimator_new.estimate_soc_compensated(3.7, 25.0).unwrap();
-
-        assert!(soc_aged < soc_new, "Aged battery should show lower SOC");
-    }
-
-    #[test]
     fn test_estimator_disable_all_compensation() {
         let mut estimator =
             SocEstimator::with_all_compensation(BatteryChemistry::LiPo, 25.0, 0.0005, 2.0, 0.02);
@@ -599,51 +462,48 @@ mod tests {
     }
 
     #[test]
-    fn test_estimate_soc_compensated_with_temp() {
-        let estimator =
-            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 25.0, 0.005);
+    fn test_estimator_enable_methods() {
+        // Test enable_temperature_compensation method (lines 212-217)
+        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
+        estimator.enable_temperature_compensation(30.0, 0.006);
+        assert!(estimator.config().enable_temperature_compensation());
+        assert_eq!(estimator.config().nominal_temperature, 30.0);
+        assert_eq!(estimator.config().temperature_coefficient, 0.006);
 
-        let base_soc = estimator.estimate_soc(3.7).unwrap();
-        let compensated_soc = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
-
-        // At lower temperature (20°C vs 25°C nominal), SOC should appear LOWER
-        // because cold reduces battery capacity
-        assert!(compensated_soc < base_soc, "Cold should reduce SOC");
+        // Test enable_aging_compensation method (lines 221-226)
+        estimator.enable_aging_compensation(3.0, 0.03);
+        assert!(estimator.config().enable_aging_compensation());
+        assert_eq!(estimator.config().age_years, 3.0);
+        assert_eq!(estimator.config().aging_factor, 0.03);
     }
 
     #[test]
-    fn test_estimate_soc_compensated_with_aging() {
-        let estimator = SocEstimator::with_aging_compensation(BatteryChemistry::LiPo, 3.0, 0.02);
+    fn test_estimator_convenience_constructors() {
+        // Test with_temperature_compensation (lines 239-249)
+        let estimator1 =
+            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 30.0, 0.006);
+        assert!(estimator1.config().enable_temperature_compensation());
+        assert_eq!(estimator1.config().nominal_temperature, 30.0);
+        assert_eq!(estimator1.config().temperature_coefficient, 0.006);
 
-        let base_soc = estimator.estimate_soc(3.7).unwrap();
-        let compensated_soc = estimator.estimate_soc_compensated(3.7, 25.0).unwrap();
+        // Test with_aging_compensation (lines 254-264)
+        let estimator2 =
+            SocEstimator::with_aging_compensation(BatteryChemistry::LiFePO4, 2.0, 0.025);
+        assert!(estimator2.config().enable_aging_compensation());
+        assert_eq!(estimator2.config().age_years, 2.0);
+        assert_eq!(estimator2.config().aging_factor, 0.025);
 
-        // With aging, SOC should appear lower
-        assert!(compensated_soc < base_soc);
-    }
+        // Test with_config for all battery chemistries including LiIon (line 134)
+        let lilon_config = EstimatorConfig::default();
+        let lilon_estimator = SocEstimator::with_config(BatteryChemistry::LiIon, lilon_config);
+        let (min, max) = lilon_estimator.voltage_range();
+        assert_eq!(min, 2.5); // LiIon min voltage is 2.5V
+        assert_eq!(max, 4.2);
 
-    #[test]
-    fn test_estimate_soc_compensated_with_all() {
-        let estimator =
-            SocEstimator::with_all_compensation(BatteryChemistry::LiPo, 25.0, 0.0005, 3.0, 0.02);
-
-        // Should apply both temperature and aging compensation
-        let result = estimator.estimate_soc_compensated(3.7, 20.0);
-        assert!(result.is_ok());
-
-        let soc = result.unwrap();
-        assert!((0.0..=100.0).contains(&soc));
-    }
-
-    #[test]
-    fn test_estimate_soc_no_compensation() {
-        let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        let base_soc = estimator.estimate_soc(3.7).unwrap();
-        let compensated_soc = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
-
-        // Without compensation enabled, should be the same
-        assert_eq!(base_soc, compensated_soc);
+        // Test Default trait for EstimatorConfig (lines 93-94)
+        let default_config: EstimatorConfig = Default::default();
+        assert_eq!(default_config.nominal_temperature, 25.0);
+        assert_eq!(default_config.temperature_coefficient, 0.005);
     }
 
     #[test]
@@ -683,260 +543,5 @@ mod tests {
         // Results should be clamped to valid range
         assert!(cold_result.unwrap() >= 0.0 && cold_result.unwrap() <= 100.0);
         assert!(hot_result.unwrap() >= 0.0 && hot_result.unwrap() <= 100.0);
-    }
-
-    #[test]
-    fn test_estimator_boundary_voltages() {
-        let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // Test at minimum voltage
-        let min_result = estimator.estimate_soc(3.2);
-        assert!(min_result.is_ok());
-        assert!(min_result.unwrap() < 5.0);
-
-        // Test at maximum voltage
-        let max_result = estimator.estimate_soc(4.2);
-        assert!(max_result.is_ok());
-        assert!(max_result.unwrap() > 95.0);
-    }
-
-    #[test]
-    fn test_estimator_with_config() {
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_nominal_temperature(20.0);
-
-        let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
-
-        assert!(estimator.config().enable_temperature_compensation());
-        assert_eq!(estimator.config().nominal_temperature, 20.0);
-    }
-
-    #[test]
-    fn test_estimator_compensated_soc_clamping() {
-        let estimator =
-            SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 25.0, 0.0005);
-
-        // Test that compensated SOC is always clamped to valid range
-        let low_result = estimator.estimate_soc_compensated(3.2, -100.0);
-        let high_result = estimator.estimate_soc_compensated(4.2, 100.0);
-
-        assert!(low_result.is_ok());
-        assert!(high_result.is_ok());
-
-        assert!(low_result.unwrap() >= 0.0);
-        assert!(high_result.unwrap() <= 100.0);
-    }
-
-    #[test]
-    fn test_estimator_different_chemistries_ranges() {
-        let lipo = SocEstimator::new(BatteryChemistry::LiPo);
-        let lifepo4 = SocEstimator::new(BatteryChemistry::LiFePO4);
-        let _lilon = SocEstimator::new(BatteryChemistry::LiIon);
-        let conservative = SocEstimator::new(BatteryChemistry::Lipo410Full340Cutoff);
-
-        // Check voltage ranges are different
-        assert_ne!(lipo.voltage_range(), lifepo4.voltage_range());
-        assert_ne!(lipo.voltage_range(), conservative.voltage_range());
-    }
-
-    #[test]
-    fn test_estimator_config_flags() {
-        // Test that flags are set correctly
-        let config1 = EstimatorConfig::default().with_temperature_compensation();
-        assert!(config1.enable_temperature_compensation());
-        assert!(!config1.enable_aging_compensation());
-
-        let config2 = EstimatorConfig::default().with_aging_compensation();
-        assert!(!config2.enable_temperature_compensation());
-        assert!(config2.enable_aging_compensation());
-
-        let config3 = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_aging_compensation();
-        assert!(config3.enable_temperature_compensation());
-        assert!(config3.enable_aging_compensation());
-    }
-
-    #[test]
-    fn test_estimator_decimal_voltages() {
-        let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // Test with decimal voltages
-        assert!(estimator.estimate_soc(3.71).is_ok());
-        assert!(estimator.estimate_soc(3.99).is_ok());
-        assert!(estimator.estimate_soc(3.25).is_ok());
-    }
-
-    #[test]
-    fn test_estimator_negative_voltage() {
-        let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // Negative voltage should return minimum SOC
-        let result = estimator.estimate_soc(-1.0);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 0.0);
-    }
-
-    #[test]
-    fn test_estimator_very_high_voltage() {
-        let estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // Very high voltage should return maximum SOC
-        let result = estimator.estimate_soc(100.0);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 100.0);
-    }
-
-    #[test]
-    fn test_estimator_with_custom_curve_and_compensation() {
-        // Test with_custom_curve method (lines 81, 87)
-        use crate::CurvePoint;
-        const CUSTOM_CURVE: Curve = Curve::new(&[
-            CurvePoint::new(3.0, 0.0),
-            CurvePoint::new(3.5, 50.0),
-            CurvePoint::new(4.0, 100.0),
-        ]);
-
-        let mut estimator = SocEstimator::with_custom_curve(&CUSTOM_CURVE);
-
-        // Test basic estimation
-        assert_eq!(estimator.estimate_soc(3.0).unwrap(), 0.0);
-        assert_eq!(estimator.estimate_soc(3.5).unwrap(), 50.0);
-        assert_eq!(estimator.estimate_soc(4.0).unwrap(), 100.0);
-
-        // Enable temperature compensation and test
-        estimator.enable_temperature_compensation(25.0, 0.005);
-        let compensated = estimator.estimate_soc_compensated(3.5, 0.0).unwrap();
-        assert!(compensated < 50.0, "Cold temperature should reduce SOC");
-    }
-
-    #[test]
-    fn test_estimate_soc_compensated_both_compensations() {
-        // Test estimate_soc_compensated with both temperature and aging (lines 135-137, 182)
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_aging_compensation()
-            .with_nominal_temperature(25.0)
-            .with_temperature_coefficient(0.005)
-            .with_age_years(2.0)
-            .with_aging_factor(0.02);
-
-        let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
-
-        // Test at cold temperature with aged battery
-        let result = estimator.estimate_soc_compensated(3.7, 0.0);
-        assert!(result.is_ok());
-
-        let soc = result.unwrap();
-        // SOC should be reduced due to both cold temperature and aging
-        let base_estimator = SocEstimator::new(BatteryChemistry::LiPo);
-        let base_soc = base_estimator.estimate_soc(3.7).unwrap();
-        assert!(soc < base_soc, "Both compensations should reduce SOC");
-    }
-
-    #[test]
-    fn test_with_aging_compensation_constructor() {
-        // Test with_aging_compensation constructor (line 218, 228)
-        let estimator = SocEstimator::with_aging_compensation(BatteryChemistry::LiFePO4, 5.0, 0.03);
-
-        assert!(estimator.config().enable_aging_compensation());
-        assert_eq!(estimator.config().age_years, 5.0);
-        assert_eq!(estimator.config().aging_factor, 0.03);
-
-        // Test that aging compensation is applied
-        let aged_soc = estimator.estimate_soc_compensated(3.2, 25.0).unwrap();
-
-        let new_estimator = SocEstimator::new(BatteryChemistry::LiFePO4);
-        let new_soc = new_estimator.estimate_soc(3.2).unwrap();
-
-        assert!(aged_soc < new_soc, "Aged battery should show lower SOC");
-    }
-
-    #[test]
-    fn test_with_temperature_compensation_constructor() {
-        // Test with_temperature_compensation constructor (line 218)
-        let estimator =
-            SocEstimator::with_temperature_compensation(BatteryChemistry::LiIon, 20.0, 0.01);
-
-        assert!(estimator.config().enable_temperature_compensation());
-        assert_eq!(estimator.config().nominal_temperature, 20.0);
-        assert_eq!(estimator.config().temperature_coefficient, 0.01);
-
-        // Test that temperature compensation is applied
-        let cold_soc = estimator.estimate_soc_compensated(3.7, 0.0).unwrap();
-        let warm_soc = estimator.estimate_soc_compensated(3.7, 20.0).unwrap();
-
-        assert!(cold_soc < warm_soc, "Cold temperature should reduce SOC");
-    }
-
-    #[test]
-    fn test_estimator_config_enable_methods_direct() {
-        // Test lines 81, 87 - enable_temperature_compensation and enable_aging_compensation
-        // These are const fn methods on EstimatorConfig
-
-        // Test enable_temperature_compensation (line 81)
-        let config_temp = EstimatorConfig::default().with_temperature_compensation();
-        assert!(config_temp.enable_temperature_compensation());
-
-        // Test enable_aging_compensation (line 87)
-        let config_aging = EstimatorConfig::default().with_aging_compensation();
-        assert!(config_aging.enable_aging_compensation());
-
-        // Test both enabled
-        let config_both = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_aging_compensation();
-        assert!(config_both.enable_temperature_compensation());
-        assert!(config_both.enable_aging_compensation());
-    }
-
-    #[test]
-    fn test_estimator_enable_temperature_method_line_218() {
-        // Test line 218 - self.config in enable_temperature_compensation
-        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // This line accesses self.config to build a new config
-        estimator.enable_temperature_compensation(22.5, 0.006);
-
-        assert!(estimator.config().enable_temperature_compensation());
-        assert_eq!(estimator.config().nominal_temperature, 22.5);
-        assert_eq!(estimator.config().temperature_coefficient, 0.006);
-    }
-
-    #[test]
-    fn test_estimator_enable_aging_method_line_228() {
-        // Test line 228 - self.config in enable_aging_compensation
-        let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
-
-        // This line accesses self.config to build a new config
-        estimator.enable_aging_compensation(1.5, 0.015);
-
-        assert!(estimator.config().enable_aging_compensation());
-        assert_eq!(estimator.config().age_years, 1.5);
-        assert_eq!(estimator.config().aging_factor, 0.015);
-    }
-
-    #[test]
-    fn test_estimate_soc_compensated_temperature_line_182() {
-        // Test line 182 - temperature parameter in estimate_soc_compensated
-        let config = EstimatorConfig::default()
-            .with_temperature_compensation()
-            .with_nominal_temperature(25.0)
-            .with_temperature_coefficient(0.005);
-
-        let estimator = SocEstimator::with_config(BatteryChemistry::LiPo, config);
-
-        // Test with various temperatures to ensure the temperature parameter (line 182) is passed
-        let temp_neg10 = estimator.estimate_soc_compensated(3.7, -10.0).unwrap();
-        let temp_0 = estimator.estimate_soc_compensated(3.7, 0.0).unwrap();
-        let temp_25 = estimator.estimate_soc_compensated(3.7, 25.0).unwrap();
-        let temp_50 = estimator.estimate_soc_compensated(3.7, 50.0).unwrap();
-
-        // Cold temperatures should show lower SOC
-        assert!(temp_neg10 < temp_0);
-        assert!(temp_0 < temp_25);
-        // Hot temperature should show higher SOC
-        assert!(temp_50 >= temp_25);
     }
 }

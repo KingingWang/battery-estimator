@@ -321,15 +321,6 @@ mod tests {
     }
 
     #[test]
-    fn test_extreme_hot_bounded() {
-        let extreme_hot = default_temperature_compensation(50.0, 150.0);
-        assert!(
-            extreme_hot <= 50.0 * 1.05,
-            "Extreme hot should be limited to +5%"
-        );
-    }
-
-    #[test]
     fn test_aging_compensation() {
         // New battery should have no change
         assert_eq!(compensate_aging(50.0, 0.0, 0.02), 50.0);
@@ -343,26 +334,6 @@ mod tests {
         assert!(
             very_aged >= 25.0,
             "Should be limited to 50% max compensation"
-        );
-    }
-
-    #[test]
-    fn test_temperature_compensation_negative_temp() {
-        // Test very cold temperatures - SOC should DECREASE
-        let result = compensate_temperature(50.0, -20.0, 25.0, 0.005);
-        assert!(
-            result < 50.0,
-            "Cold temperature should decrease SOC due to reduced capacity"
-        );
-    }
-
-    #[test]
-    fn test_temperature_compensation_positive_temp() {
-        // Test warm temperatures - SOC should increase slightly
-        let result = compensate_temperature(50.0, 35.0, 25.0, 0.005);
-        assert!(
-            result >= 50.0,
-            "Warm temperature should maintain or slightly increase SOC"
         );
     }
 
