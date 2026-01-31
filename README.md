@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/battery-estimator)](https://crates.io/crates/battery-estimator)
 [![Documentation](https://docs.rs/battery-estimator/badge.svg)](https://docs.rs/battery-estimator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![codecov](https://codecov.io/gh/kingingwang/battery-estimator/branch/main/graph/badge.svg)](https://codecov.io/gh/kingingwang/battery-estimator)
 
 A lightweight, `no_std` compatible Rust library for estimating battery State of Charge (SOC) from voltage measurements. Designed specifically for embedded systems with zero dependencies and no heap allocations.
 
