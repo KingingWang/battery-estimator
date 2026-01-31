@@ -212,11 +212,16 @@ impl Curve {
             return Ok(min_soc);
         }
 
-        // Linear search for interpolation segment
-        let len = self.len as usize;
-        for i in 1..len {
-            let prev = self.points[i - 1];
-            let curr = self.points[i];
+        // Binary search for interpolation segment using Rust's partition_point
+        let points = &self.points[..self.len as usize];
+
+        // Find the index of the first point with voltage > target voltage
+        let idx = points.partition_point(|p| p.voltage_mv as i32 <= voltage_mv);
+
+        // Check if we found a valid interpolation segment
+        if idx > 0 && idx < points.len() {
+            let prev = points[idx - 1];
+            let curr = points[idx];
 
             if voltage_mv >= prev.voltage_mv as i32 && voltage_mv <= curr.voltage_mv as i32 {
                 let range = (curr.voltage_mv as i32 - prev.voltage_mv as i32) as f32;
