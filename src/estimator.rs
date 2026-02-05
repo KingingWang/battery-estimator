@@ -76,13 +76,13 @@ impl EstimatorConfig {
         self
     }
 
-    /// Whether temperature compensation is enabled
-    pub const fn enable_temperature_compensation(self) -> bool {
+    /// Returns `true` if temperature compensation is enabled
+    pub const fn is_temperature_compensation_enabled(self) -> bool {
         (self.flags & 0x01) != 0
     }
 
-    /// Whether aging compensation is enabled
-    pub const fn enable_aging_compensation(self) -> bool {
+    /// Returns `true` if aging compensation is enabled
+    pub const fn is_aging_compensation_enabled(self) -> bool {
         (self.flags & 0x02) != 0
     }
 }
@@ -173,7 +173,7 @@ impl SocEstimator {
         let mut soc = base_soc;
 
         // Apply temperature compensation
-        if EstimatorConfig::enable_temperature_compensation(self.config) {
+        if EstimatorConfig::is_temperature_compensation_enabled(self.config) {
             soc = compensate_temperature(
                 soc,
                 temperature,
@@ -183,7 +183,7 @@ impl SocEstimator {
         }
 
         // Apply aging compensation
-        if EstimatorConfig::enable_aging_compensation(self.config) {
+        if EstimatorConfig::is_aging_compensation_enabled(self.config) {
             soc = compensate_aging(soc, self.config.age_years, self.config.aging_factor);
         }
 
@@ -393,7 +393,7 @@ mod tests {
             .with_nominal_temperature(30.0);
 
         estimator.update_config(new_config);
-        assert!(estimator.config().enable_temperature_compensation());
+        assert!(estimator.config().is_temperature_compensation_enabled());
         assert_eq!(estimator.config().nominal_temperature, 30.0);
     }
 
@@ -403,8 +403,8 @@ mod tests {
             SocEstimator::with_all_compensation(BatteryChemistry::LiPo, 25.0, 0.005, 2.0, 0.02);
 
         let config = estimator.config();
-        assert!(config.enable_temperature_compensation());
-        assert!(config.enable_aging_compensation());
+        assert!(config.is_temperature_compensation_enabled());
+        assert!(config.is_aging_compensation_enabled());
         assert_eq!(config.nominal_temperature, 25.0);
         assert_eq!(config.temperature_coefficient, 0.005);
         assert_eq!(config.age_years, 2.0);
@@ -457,8 +457,8 @@ mod tests {
 
         estimator.disable_all_compensation();
 
-        assert!(!estimator.config().enable_temperature_compensation());
-        assert!(!estimator.config().enable_aging_compensation());
+        assert!(!estimator.config().is_temperature_compensation_enabled());
+        assert!(!estimator.config().is_aging_compensation_enabled());
     }
 
     #[test]
@@ -466,13 +466,13 @@ mod tests {
         // Test enable_temperature_compensation method (lines 212-217)
         let mut estimator = SocEstimator::new(BatteryChemistry::LiPo);
         estimator.enable_temperature_compensation(30.0, 0.006);
-        assert!(estimator.config().enable_temperature_compensation());
+        assert!(estimator.config().is_temperature_compensation_enabled());
         assert_eq!(estimator.config().nominal_temperature, 30.0);
         assert_eq!(estimator.config().temperature_coefficient, 0.006);
 
         // Test enable_aging_compensation method (lines 221-226)
         estimator.enable_aging_compensation(3.0, 0.03);
-        assert!(estimator.config().enable_aging_compensation());
+        assert!(estimator.config().is_aging_compensation_enabled());
         assert_eq!(estimator.config().age_years, 3.0);
         assert_eq!(estimator.config().aging_factor, 0.03);
     }
@@ -482,14 +482,14 @@ mod tests {
         // Test with_temperature_compensation (lines 239-249)
         let estimator1 =
             SocEstimator::with_temperature_compensation(BatteryChemistry::LiPo, 30.0, 0.006);
-        assert!(estimator1.config().enable_temperature_compensation());
+        assert!(estimator1.config().is_temperature_compensation_enabled());
         assert_eq!(estimator1.config().nominal_temperature, 30.0);
         assert_eq!(estimator1.config().temperature_coefficient, 0.006);
 
         // Test with_aging_compensation (lines 254-264)
         let estimator2 =
             SocEstimator::with_aging_compensation(BatteryChemistry::LiFePO4, 2.0, 0.025);
-        assert!(estimator2.config().enable_aging_compensation());
+        assert!(estimator2.config().is_aging_compensation_enabled());
         assert_eq!(estimator2.config().age_years, 2.0);
         assert_eq!(estimator2.config().aging_factor, 0.025);
 

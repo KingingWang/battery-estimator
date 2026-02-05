@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-battery-estimator = "0.1"
+battery-estimator = "0.2"
 ```
 
 ## Quick Start
@@ -164,9 +164,9 @@ The library is designed for minimal memory usage:
 
 ## Performance
 
-- **Fast estimation**: O(n) where n is the number of curve points (typically 8-12)
+- **Fast estimation**: O(log n) using binary search for curve interpolation
 - **Deterministic execution time**: No dynamic memory allocation
-- **Linear search**: Efficient for typical battery curves with limited points
+- **Optimized boundary checks**: Cached min/max SOC values for O(1) lookups
 - **Const-friendly**: Curve creation and validation use `const fn` for compile-time safety
 
 ## API Documentation

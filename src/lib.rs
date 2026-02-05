@@ -78,6 +78,7 @@
 //! ## Module Structure
 //!
 //! - [`SocEstimator`] - Main estimator struct for SOC calculations
+//! - [`EstimatorConfig`] - Configuration for SOC estimator (compensation settings)
 //! - [`BatteryChemistry`] - Supported battery types
 //! - [`Curve`] - Voltage-SOC curve representation
 //! - [`CurvePoint`] - Individual voltage-SOC data point
@@ -99,7 +100,7 @@ pub use compensation::{
 };
 pub use curve::{default_curves, Curve};
 pub use error::Error;
-pub use estimator::SocEstimator;
+pub use estimator::{EstimatorConfig, SocEstimator};
 pub use types::{BatteryChemistry, CurvePoint};
 
 /// Prelude module for convenient imports

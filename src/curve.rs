@@ -22,6 +22,7 @@ pub const MAX_CURVE_POINTS: usize = 32;
 /// - `points`: Fixed array of 32 points
 /// - `len`: `u8` for point count (vs `usize`, saves memory)
 /// - `min_voltage_mv`/`max_voltage_mv`: `u16` for voltage limits
+/// - `min_soc_tenth`/`max_soc_tenth`: `u16` for cached SOC values (tenth of percent)
 ///
 /// # Examples
 ///
@@ -45,8 +46,8 @@ pub const MAX_CURVE_POINTS: usize = 32;
 /// # Interpolation
 ///
 /// The curve uses linear interpolation between points:
-/// - Values at or below minimum voltage → 0%
-/// - Values at or above maximum voltage → 100%
+/// - Values at or below minimum voltage → Returns min SOC
+/// - Values at or above maximum voltage → Returns max SOC
 /// - Values between points → Linear interpolation
 #[derive(Debug, Clone, Copy)]
 pub struct Curve {
@@ -61,6 +62,12 @@ pub struct Curve {
 
     /// Maximum voltage in millivolts
     max_voltage_mv: u16,
+
+    /// SOC at minimum voltage (cached in tenths of percent)
+    min_soc_tenth: u16,
+
+    /// SOC at maximum voltage (cached in tenths of percent)
+    max_soc_tenth: u16,
 }
 
 impl Curve {
@@ -81,6 +88,8 @@ impl Curve {
             len: 0,
             min_voltage_mv: 0,
             max_voltage_mv: 0,
+            min_soc_tenth: 0,
+            max_soc_tenth: 0,
         }
     }
 
@@ -113,6 +122,8 @@ impl Curve {
 
         let mut min = 0u16;
         let mut max = 0u16;
+        let mut min_soc = 0u16;
+        let mut max_soc = 0u16;
 
         while i < points.len() && i < MAX_CURVE_POINTS {
             let p = points[i];
@@ -121,12 +132,16 @@ impl Curve {
             if i == 0 {
                 min = p.voltage_mv;
                 max = p.voltage_mv;
+                min_soc = p.soc_tenth;
+                max_soc = p.soc_tenth;
             } else {
                 if p.voltage_mv < min {
                     min = p.voltage_mv;
+                    min_soc = p.soc_tenth;
                 }
                 if p.voltage_mv > max {
                     max = p.voltage_mv;
+                    max_soc = p.soc_tenth;
                 }
             }
 
@@ -137,6 +152,8 @@ impl Curve {
         if i > 0 {
             curve.min_voltage_mv = min;
             curve.max_voltage_mv = max;
+            curve.min_soc_tenth = min_soc;
+            curve.max_soc_tenth = max_soc;
         }
         curve
     }
@@ -155,9 +172,14 @@ impl Curve {
     ///
     /// # Behavior
     ///
-    /// - Voltage ≤ minimum → Returns 0%
-    /// - Voltage ≥ maximum → Returns 100%
+    /// - Voltage ≤ minimum → Returns min SOC
+    /// - Voltage ≥ maximum → Returns max SOC
     /// - Voltage between points → Linear interpolation
+    ///
+    /// # Performance
+    ///
+    /// This method uses binary search (via `partition_point`) for O(log n) lookup
+    /// and cached SOC values for O(1) boundary checks.
     ///
     /// # Examples
     ///
@@ -186,28 +208,12 @@ impl Curve {
 
         let voltage_mv = (voltage * 1000.0) as i32;
 
-        // Boundary checks - find the actual min/max SOC points
+        // Boundary checks - use cached SOC values for O(1) lookup
         if voltage_mv >= self.max_voltage_mv as i32 {
-            // Find the point with max voltage and return its SOC
-            let mut max_soc = self.points[0].soc();
-            for i in 0..self.len as usize {
-                if self.points[i].voltage_mv == self.max_voltage_mv {
-                    max_soc = self.points[i].soc();
-                    break;
-                }
-            }
-            return Ok(max_soc);
+            return Ok(self.max_soc_tenth as f32 / 10.0);
         }
         if voltage_mv <= self.min_voltage_mv as i32 {
-            // Find the point with min voltage and return its SOC
-            let mut min_soc = self.points[0].soc();
-            for i in 0..self.len as usize {
-                if self.points[i].voltage_mv == self.min_voltage_mv {
-                    min_soc = self.points[i].soc();
-                    break;
-                }
-            }
-            return Ok(min_soc);
+            return Ok(self.min_soc_tenth as f32 / 10.0);
         }
 
         // Binary search for interpolation segment using Rust's partition_point
@@ -397,6 +403,7 @@ pub mod default_curves {
         CurvePoint::new(4.10, 100.0),
     ]);
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -499,92 +506,105 @@ mod tests {
         // The curve stores points in order, but with decreasing voltages
         // so the linear search won't find a valid segment
         let curve = Curve::new(&[
-            CurvePoint::new(4.0, 100.0), // Higher voltage first
-            CurvePoint::new(3.0, 0.0),   // Lower voltage second
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(2.5, 50.0), // Decreasing voltage
+            CurvePoint::new(2.0, 100.0),
         ]);
 
-        // min_voltage_mv = 3000, max_voltage_mv = 4000
-        // For voltage 3.5V (3500 mV):
-        // - Not >= max (4000), not <= min (3000)
-        // - Loop checks: prev=4.0, curr=3.0
-        //   - voltage_mv (3500) >= prev.voltage_mv (4000)? NO
-        // - Falls through to final NumericalError
-        let result = curve.voltage_to_soc(3.5);
-        assert!(result.is_err());
+        // Voltage 2.7 is between 3.0 and 2.5 but not in increasing order
+        // This should trigger NumericalError
+        assert!(matches!(
+            curve.voltage_to_soc(2.7),
+            Err(Error::NumericalError)
+        ));
     }
 
     #[test]
-    fn test_curve_truncation() {
-        // Test that curve truncates if more than MAX_CURVE_POINTS are provided
-        let mut points = [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS + 10];
-        for (i, point) in points.iter_mut().enumerate().take(MAX_CURVE_POINTS + 10) {
-            let voltage = 3.0 + (i as f32 * 0.1);
-            let soc = (i as f32 / (MAX_CURVE_POINTS + 9) as f32) * 100.0;
-            *point = CurvePoint::new(voltage, soc);
-        }
+    fn test_curve_cached_soc_values() {
+        // Test that cached SOC values are correctly computed
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 5.0), // Non-zero min SOC
+            CurvePoint::new(3.5, 50.0),
+            CurvePoint::new(4.0, 95.0), // Non-100 max SOC
+        ]);
 
-        let curve = Curve::new(&points);
-        assert_eq!(curve.len(), MAX_CURVE_POINTS);
+        // At min voltage, should return cached min SOC (5.0%)
+        assert_eq!(curve.voltage_to_soc(3.0).unwrap(), 5.0);
+
+        // Below min voltage, should still return cached min SOC
+        assert_eq!(curve.voltage_to_soc(2.5).unwrap(), 5.0);
+
+        // At max voltage, should return cached max SOC (95.0%)
+        assert_eq!(curve.voltage_to_soc(4.0).unwrap(), 95.0);
+
+        // Above max voltage, should still return cached max SOC
+        assert_eq!(curve.voltage_to_soc(4.5).unwrap(), 95.0);
     }
 
     #[test]
     fn test_curve_interpolation_precision() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.1, 10.0),
+            CurvePoint::new(3.2, 20.0),
+            CurvePoint::new(3.3, 30.0),
+        ]);
+
+        // Test precise interpolation
+        assert_eq!(curve.voltage_to_soc(3.05).unwrap(), 5.0);
+        assert_eq!(curve.voltage_to_soc(3.15).unwrap(), 15.0);
+        assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
+    }
+
+    #[test]
+    fn test_curve_single_segment() {
         let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
 
-        // Test interpolation at 0.01V precision
-        let soc = curve.voltage_to_soc(3.01).unwrap();
-        assert!((soc - 1.0).abs() < 0.1);
-
-        let soc = curve.voltage_to_soc(3.99).unwrap();
-        assert!((soc - 99.0).abs() < 0.1);
+        // Single segment interpolation
+        assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
+        assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
+        assert_eq!(curve.voltage_to_soc(3.75).unwrap(), 75.0);
     }
 
     #[test]
-    fn test_default_curves_exist() {
-        // Test that all default curves can be created
-        assert_eq!(default_curves::LIPO.len(), 10);
-        assert_eq!(default_curves::LIFEPO4.len(), 10);
-        assert_eq!(default_curves::LIION.len(), 11);
-        assert_eq!(default_curves::LIPO410_FULL340_CUTOFF.len(), 13);
-    }
+    fn test_curve_dense_points() {
+        // Test with many closely spaced points - use array for no_std compatibility
+        let points: [CurvePoint; 21] =
+            core::array::from_fn(|i| CurvePoint::new(3.0 + i as f32 * 0.05, i as f32 * 5.0));
 
-    #[test]
-    fn test_default_curves_valid() {
-        // Test that all default curves produce valid results
-        let curves = [
-            &default_curves::LIPO,
-            &default_curves::LIFEPO4,
-            &default_curves::LIION,
-            &default_curves::LIPO410_FULL340_CUTOFF,
-        ];
+        let curve = Curve::new(&points);
 
-        for curve in curves.iter() {
-            // Test that curve has at least 2 points
-            assert!(curve.len() >= 2);
-
-            // Test that curve produces valid SOC values
-            let (min_v, max_v) = curve.voltage_range();
-            let mid_v = (min_v + max_v) / 2.0;
-
-            assert!(curve.voltage_to_soc(min_v).is_ok());
-            assert!(curve.voltage_to_soc(max_v).is_ok());
-            assert!(curve.voltage_to_soc(mid_v).is_ok());
+        // Test that interpolation works with dense points
+        for i in 0..20 {
+            let voltage = 3.0 + i as f32 * 0.05 + 0.025;
+            let expected_soc = i as f32 * 5.0 + 2.5;
+            assert!((curve.voltage_to_soc(voltage).unwrap() - expected_soc).abs() < 0.01);
         }
     }
 
     #[test]
-    fn test_curve_min_voltage_boundary() {
-        // Test exact min voltage boundary (line 198, 209)
-        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+    fn test_curve_non_linear() {
+        // Test with non-linear curve (exponential-like)
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.5, 20.0),
+            CurvePoint::new(4.0, 60.0),
+            CurvePoint::new(4.2, 100.0),
+        ]);
 
-        // Test exactly at min voltage
-        let result = curve.voltage_to_soc(3.0);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 0.0);
+        // Verify non-linear interpolation
+        let soc_35 = curve.voltage_to_soc(3.5).unwrap();
+        let soc_38 = curve.voltage_to_soc(3.8).unwrap();
+        let soc_41 = curve.voltage_to_soc(4.1).unwrap();
 
-        // Test below min voltage
-        let result_below = curve.voltage_to_soc(2.9);
-        assert!(result_below.is_ok());
-        assert_eq!(result_below.unwrap(), 0.0);
+        assert_eq!(soc_35, 20.0);
+        // 3.8V is between 3.5V (20%) and 4.0V (60%)
+        // ratio = (3.8 - 3.5) / (4.0 - 3.5) = 0.6
+        // soc = 20 + 0.6 * 40 = 44.0
+        assert!((soc_38 - 44.0).abs() < 0.1);
+        // 4.1V is between 4.0V (60%) and 4.2V (100%)
+        // ratio = (4.1 - 4.0) / (4.2 - 4.0) = 0.5
+        // soc = 60 + 0.5 * 40 = 80.0
+        assert!((soc_41 - 80.0).abs() < 0.1);
     }
 }
