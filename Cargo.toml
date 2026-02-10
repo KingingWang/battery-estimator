@@ -1,6 +1,6 @@
 [package]
 name = "battery-estimator"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 rust-version = "1.83"
 description = "A lightweight no_std library for estimating battery SOC from voltage with temperature and aging compensation"

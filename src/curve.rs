@@ -101,9 +101,10 @@ impl Curve {
     ///
     /// # Notes
     ///
-    /// - Points must be ordered by increasing voltage
+    /// - Points **must be ordered by increasing voltage** for correct interpolation
     /// - Maximum of 32 points will be stored
     /// - Minimum of 2 points required for valid interpolation
+    /// - Use [`validate_sorted()`](Self::validate_sorted) to verify point order at runtime
     ///
     /// # Examples
     ///
