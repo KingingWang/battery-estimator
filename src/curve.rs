@@ -130,11 +130,13 @@ impl Curve {
             curve.points[i] = p;
 
             if i == 0 {
+                // First point initializes all values
                 min = p.voltage_mv;
                 max = p.voltage_mv;
                 min_soc = p.soc_tenth;
                 max_soc = p.soc_tenth;
             } else {
+                // Update min/max voltage and their corresponding SOC values
                 if p.voltage_mv < min {
                     min = p.voltage_mv;
                     min_soc = p.soc_tenth;
@@ -208,12 +210,18 @@ impl Curve {
 
         let voltage_mv = (voltage * 1000.0) as i32;
 
+        // Cache frequently used values to avoid repeated conversions
+        let max_voltage_mv = self.max_voltage_mv as i32;
+        let min_voltage_mv = self.min_voltage_mv as i32;
+        let max_soc = self.max_soc_tenth as f32 / 10.0;
+        let min_soc = self.min_soc_tenth as f32 / 10.0;
+
         // Boundary checks - use cached SOC values for O(1) lookup
-        if voltage_mv >= self.max_voltage_mv as i32 {
-            return Ok(self.max_soc_tenth as f32 / 10.0);
+        if voltage_mv >= max_voltage_mv {
+            return Ok(max_soc);
         }
-        if voltage_mv <= self.min_voltage_mv as i32 {
-            return Ok(self.min_soc_tenth as f32 / 10.0);
+        if voltage_mv <= min_voltage_mv {
+            return Ok(min_soc);
         }
 
         // Binary search for interpolation segment using Rust's partition_point

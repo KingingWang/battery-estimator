@@ -84,7 +84,7 @@ pub fn compensate_temperature(
 
     // Apply compensation: cold reduces SOC, warm increases SOC slightly
     // Bound the total compensation to reasonable limits (-30% to +5%)
-    let bounded_change = clamp(capacity_change, -0.30, 0.05);
+    let bounded_change = capacity_change.clamp(-0.30, 0.05);
 
     soc * (1.0 + bounded_change)
 }
@@ -142,7 +142,7 @@ pub fn compensate_aging(soc: f32, age_years: f32, aging_factor: f32) -> f32 {
     }
 
     let age_compensation = age_years * aging_factor;
-    soc * (1.0 - clamp(age_compensation, 0.0, 0.5)) // Max 50% compensation
+    soc * (1.0 - age_compensation.clamp(0.0, 0.5)) // Max 50% compensation
 }
 
 /// Applies default temperature compensation
@@ -179,21 +179,6 @@ pub fn default_temperature_compensation(soc: f32, temperature: f32) -> f32 {
     const COEFFICIENT: f32 = 0.005; // 0.5% capacity loss per °C below nominal
 
     compensate_temperature(soc, temperature, NOMINAL_TEMP, COEFFICIENT)
-}
-
-/// Clamps a value between minimum and maximum bounds
-///
-/// # Arguments
-///
-/// * `value` - Value to clamp
-/// * `min` - Minimum allowed value
-/// * `max` - Maximum allowed value
-///
-/// # Returns
-///
-/// Clamped value within [min, max] range
-fn clamp(value: f32, min: f32, max: f32) -> f32 {
-    value.clamp(min, max)
 }
 
 #[cfg(test)]
