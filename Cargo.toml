@@ -13,6 +13,8 @@ authors = ["kingingwang@foxmail.com"]
 
 [dependencies]
 thiserror = { version = "2", default-features = false }
+fixed = { version = "1.28", default-features = false, optional = true }
 
 [features]
 default = []
+fixed-point = ["fixed"]

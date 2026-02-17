@@ -95,6 +95,9 @@ mod error;
 mod estimator;
 mod types;
 
+#[cfg(feature = "fixed-point")]
+pub mod fixed_point;
+
 pub use compensation::{
     compensate_aging, compensate_temperature, default_temperature_compensation,
 };
