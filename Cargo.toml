@@ -7,7 +7,7 @@ description = "A lightweight no_std library for estimating battery SOC from volt
 readme = "README.md"
 repository = "https://github.com/KingingWang/battery-estimator"
 license = "MIT"
-keywords = ["battery", "soc", "no-std", "voltage", "level", "fixed-point"]
+keywords = ["battery", "soc", "no-std", "embedded", "fixed-point"]
 categories = ["embedded", "no-std"]
 authors = ["kingingwang@foxmail.com"]
 

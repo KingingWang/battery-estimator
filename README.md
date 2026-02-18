@@ -9,9 +9,10 @@ A lightweight, `no_std` compatible Rust library for estimating battery State of 
 
 ## Features
 
-- ✅ **Minimal dependencies** - Only depends on `thiserror` for error handling (no runtime overhead)
+- ✅ **Minimal dependencies** - Only depends on `fixed` and `typenum` for fixed-point arithmetic
 - ✅ **`no_std` compatible** - Perfect for embedded systems and microcontrollers
 - ✅ **No heap allocations** - Uses only stack memory and fixed-size arrays
+- ✅ **Fixed-point arithmetic** - Efficient on MCUs without hardware FPU
 - ✅ **Multiple battery chemistries** - Built-in support for LiPo, LiFePO4, Li-Ion, and conservative curves
 - ✅ **Temperature compensation** - Correct SOC readings based on temperature effects
 - ✅ **Aging compensation** - Adjust for battery capacity degradation over time
