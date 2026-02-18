@@ -15,5 +15,12 @@ authors = ["kingingwang@foxmail.com"]
 fixed = { version = "1.28", default-features = false }
 typenum = { version = "1.17", default-features = false }
 
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
 [features]
 default = []
