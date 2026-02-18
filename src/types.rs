@@ -5,19 +5,17 @@
 //! - [`BatteryChemistry`] - Enumeration of supported battery types
 //! - [`CurvePoint`] - Individual voltage-SOC data point for curves
 
-/// Const-compatible check for finite f32 values
+use fixed::types::I16F16;
+
+/// Fixed-point type for internal calculations
 ///
-/// Returns true if the value is neither NaN nor infinite.
-#[inline]
-const fn is_finite_const(value: f32) -> bool {
-    // A value is finite if it's not NaN and not infinite
-    // NaN: exponent all 1s, mantissa non-zero
-    // Infinity: exponent all 1s, mantissa zero
-    // We check if exponent bits are not all 1s (0xFF)
-    let bits = value.to_bits();
-    let exponent = (bits >> 23) & 0xFF;
-    exponent != 0xFF
-}
+/// Uses 16.16 fixed-point format:
+/// - 16 integer bits (range: -32768 to 32767)
+/// - 16 fractional bits (precision: 1/65536 ≈ 0.000015)
+///
+/// This provides sufficient precision for battery estimation while being
+/// efficient on embedded systems without FPU.
+pub type Fixed = I16F16;
 
 /// Battery chemistry types supported by the library
 ///
@@ -61,7 +59,6 @@ pub enum BatteryChemistry {
     /// - Nominal voltage: 3.7V
     /// - Typical use: RC vehicles, drones, portable electronics
     LiPo,
-
     /// Lithium Iron Phosphate (LiFePO4) battery
     ///
     /// - Full charge: 3.65V
@@ -70,7 +67,6 @@ pub enum BatteryChemistry {
     /// - Typical use: Solar systems, EVs, energy storage
     /// - Advantages: Long cycle life (2000+ cycles), stable voltage
     LiFePO4,
-
     /// Standard Lithium Ion battery
     ///
     /// - Full charge: 4.2V
@@ -78,7 +74,6 @@ pub enum BatteryChemistry {
     /// - Nominal voltage: 3.7V
     /// - Typical use: Laptops, power tools, consumer electronics
     LiIon,
-
     /// Conservative LiPo battery curve for extended cycle life
     ///
     /// - Full charge: 4.1V (lower than standard 4.2V)
@@ -96,7 +91,7 @@ pub enum BatteryChemistry {
 ///
 /// # Internal Representation
 ///
-/// For memory efficiency in embedded systems, values are stored as integers:
+/// For memory efficiency in embedded systems, values are stored as fixed-point:
 /// - **Voltage**: Stored in millivolts (`u16`, range 0-65535 mV)
 /// - **SOC**: Stored in tenths of a percent (`u16`, range 0-1000 = 0-100%)
 ///
@@ -127,7 +122,6 @@ pub struct CurvePoint {
     /// Range: 0-65535 mV (0-65.535V)
     /// Internal storage format for memory efficiency
     pub voltage_mv: u16,
-
     /// State of charge in tenths of a percent
     ///
     /// Range: 0-1000 (0-100%)
@@ -189,6 +183,62 @@ impl CurvePoint {
         }
     }
 
+    /// Creates a new curve point from fixed-point values
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage` - Voltage in volts as fixed-point
+    /// * `soc` - State of charge in percent as fixed-point
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::CurvePoint;
+    /// use fixed::types::I16F16;
+    ///
+    /// let voltage = I16F16::from_num(3.7);
+    /// let soc = I16F16::from_num(50.0);
+    /// let point = CurvePoint::from_fixed(voltage, soc);
+    /// assert_eq!(point.voltage(), 3.7);
+    /// assert_eq!(point.soc(), 50.0);
+    /// ```
+    #[inline]
+    pub fn from_fixed(voltage: Fixed, soc: Fixed) -> Self {
+        // Clamp voltage to valid range
+        let safe_voltage = if voltage < Fixed::ZERO {
+            Fixed::ZERO
+        } else if voltage > Fixed::from_num(65.535) {
+            Fixed::from_num(65.535)
+        } else {
+            voltage
+        };
+
+        // Clamp SOC to 0-100%
+        let safe_soc = if soc < Fixed::ZERO {
+            Fixed::ZERO
+        } else if soc > Fixed::from_num(100.0) {
+            Fixed::from_num(100.0)
+        } else {
+            soc
+        };
+
+        // Convert voltage to millivolts using i64 arithmetic to avoid overflow
+        // I16F16 format: value = bits / 65536
+        // So: millivolts = (bits * 1000 + 32768) / 65536 (with rounding)
+        let voltage_bits = safe_voltage.to_bits() as i64;
+        let voltage_mv = ((voltage_bits * 1000 + 32768) / 65536) as u16;
+
+        // Convert SOC to tenths of a percent using i64 arithmetic
+        // tenths = (bits * 10 + 32768) / 65536 (with rounding)
+        let soc_bits = safe_soc.to_bits() as i64;
+        let soc_tenth = ((soc_bits * 10 + 32768) / 65536) as u16;
+
+        Self {
+            voltage_mv,
+            soc_tenth,
+        }
+    }
+
     /// Creates a new curve point without validation (for performance-critical code)
     ///
     /// # Safety
@@ -212,6 +262,64 @@ impl CurvePoint {
             voltage_mv: (voltage * 1000.0) as u16,
             soc_tenth: (soc * 10.0) as u16,
         }
+    }
+
+    /// Creates a curve point from raw internal representation
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage_mv` - Voltage in millivolts
+    /// * `soc_tenth` - SOC in tenths of a percent (0-1000 = 0-100%)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::CurvePoint;
+    ///
+    /// let point = CurvePoint::from_raw(3700, 500);
+    /// assert_eq!(point.voltage(), 3.7);
+    /// assert_eq!(point.soc(), 50.0);
+    /// ```
+    #[inline]
+    pub const fn from_raw(voltage_mv: u16, soc_tenth: u16) -> Self {
+        Self {
+            voltage_mv,
+            soc_tenth,
+        }
+    }
+
+    /// Returns the voltage in volts as a fixed-point value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::CurvePoint;
+    /// use fixed::types::I16F16;
+    ///
+    /// let point = CurvePoint::new(3.7, 50.0);
+    /// let voltage = point.voltage_fixed();
+    /// assert_eq!(voltage, I16F16::from_num(3.7));
+    /// ```
+    #[inline]
+    pub fn voltage_fixed(&self) -> Fixed {
+        Fixed::from_num(self.voltage_mv) / Fixed::from_num(1000)
+    }
+
+    /// Returns the state of charge in percent as a fixed-point value
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::CurvePoint;
+    /// use fixed::types::I16F16;
+    ///
+    /// let point = CurvePoint::new(3.7, 50.0);
+    /// let soc = point.soc_fixed();
+    /// assert_eq!(soc, I16F16::from_num(50.0));
+    /// ```
+    #[inline]
+    pub fn soc_fixed(&self) -> Fixed {
+        Fixed::from_num(self.soc_tenth) / Fixed::from_num(10)
     }
 
     /// Returns the voltage in volts
@@ -260,6 +368,20 @@ impl From<(f32, f32)> for CurvePoint {
     fn from((voltage, soc): (f32, f32)) -> Self {
         Self::new(voltage, soc)
     }
+}
+
+/// Const-compatible check for finite f32 values
+///
+/// Returns true if the value is neither NaN nor infinite.
+#[inline]
+const fn is_finite_const(value: f32) -> bool {
+    // A value is finite if it's not NaN and not infinite
+    // NaN: exponent all 1s, mantissa non-zero
+    // Infinity: exponent all 1s, mantissa zero
+    // We check if exponent bits are not all 1s (0xFF)
+    let bits = value.to_bits();
+    let exponent = (bits >> 23) & 0xFF;
+    exponent != 0xFF
 }
 
 #[cfg(test)]
@@ -347,6 +469,7 @@ mod tests {
     fn test_curve_point_copy() {
         let point1 = CurvePoint::new(3.7, 50.0);
         let point2 = point1;
+
         assert_eq!(point1, point2);
     }
 
@@ -391,6 +514,7 @@ mod tests {
         // Explicitly test the From trait implementation
         let tuple = (3.9, 80.0);
         let point = CurvePoint::from(tuple);
+
         assert_eq!(point.voltage(), 3.9);
         assert_eq!(point.soc(), 80.0);
     }
@@ -415,8 +539,10 @@ mod tests {
     #[test]
     fn test_curve_point_internal_representation() {
         let point = CurvePoint::new(3.7, 50.0);
+
         // Voltage should be stored in millivolts
         assert_eq!(point.voltage_mv, 3700);
+
         // SOC should be stored in tenths of a percent
         assert_eq!(point.soc_tenth, 500);
     }
@@ -438,6 +564,7 @@ mod tests {
     fn test_battery_chemistry_copy() {
         let chem1 = BatteryChemistry::LiPo;
         let chem2 = chem1;
+
         assert_eq!(chem1, chem2);
     }
 
@@ -461,7 +588,66 @@ mod tests {
     fn test_curve_point_voltage_precision() {
         // Test that voltage precision is maintained
         let point = CurvePoint::new(3.715, 50.0);
+
         // Should be stored and retrieved accurately
         assert!((point.voltage() - 3.715).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_curve_point_from_fixed() {
+        let voltage = Fixed::from_num(3.7);
+        let soc = Fixed::from_num(50.0);
+        let point = CurvePoint::from_fixed(voltage, soc);
+
+        // Use tolerance for fixed-point precision
+        assert!((point.voltage() - 3.7).abs() < 0.001);
+        assert!((point.soc() - 50.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_curve_point_voltage_fixed() {
+        let point = CurvePoint::new(3.7, 50.0);
+        let voltage = point.voltage_fixed();
+
+        // Use tolerance for fixed-point precision
+        assert!((voltage - Fixed::from_num(3.7)).abs() < Fixed::from_num(0.001));
+    }
+
+    #[test]
+    fn test_curve_point_soc_fixed() {
+        let point = CurvePoint::new(3.7, 50.0);
+        let soc = point.soc_fixed();
+
+        assert_eq!(soc, Fixed::from_num(50.0));
+    }
+
+    #[test]
+    fn test_curve_point_from_raw() {
+        let point = CurvePoint::from_raw(3700, 500);
+        assert_eq!(point.voltage(), 3.7);
+        assert_eq!(point.soc(), 50.0);
+    }
+
+    #[test]
+    fn test_curve_point_from_fixed_clamping() {
+        // Test negative voltage clamping
+        let point = CurvePoint::from_fixed(Fixed::from_num(-1.0), Fixed::from_num(50.0));
+        assert_eq!(point.voltage(), 0.0);
+
+        // Test voltage exceeding max - use from_num(65.535) directly
+        let point = CurvePoint::from_fixed(Fixed::from_num(65.535), Fixed::from_num(50.0));
+        assert!((point.voltage() - 65.535).abs() < 0.001);
+
+        // Test voltage well exceeding max (should clamp to 65.535)
+        let point = CurvePoint::from_fixed(Fixed::from_num(100.0), Fixed::from_num(50.0));
+        assert!((point.voltage() - 65.535).abs() < 0.001);
+
+        // Test negative SOC clamping
+        let point = CurvePoint::from_fixed(Fixed::from_num(3.7), Fixed::from_num(-10.0));
+        assert_eq!(point.soc(), 0.0);
+
+        // Test SOC exceeding 100
+        let point = CurvePoint::from_fixed(Fixed::from_num(3.7), Fixed::from_num(150.0));
+        assert_eq!(point.soc(), 100.0);
     }
 }

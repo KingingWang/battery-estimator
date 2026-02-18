@@ -3,7 +3,7 @@
 //! This module provides the [`Curve`] struct for representing battery
 //! discharge curves and converting voltage measurements to state-of-charge (SOC) values.
 
-use crate::{CurvePoint, Error};
+use crate::{CurvePoint, Error, Fixed};
 
 /// Maximum number of points allowed in a voltage curve
 ///
@@ -53,19 +53,14 @@ pub const MAX_CURVE_POINTS: usize = 32;
 pub struct Curve {
     /// Array of curve points (fixed size for memory efficiency)
     points: [CurvePoint; MAX_CURVE_POINTS],
-
     /// Number of points in the curve (0-255)
     len: u8,
-
     /// Minimum voltage in millivolts
     min_voltage_mv: u16,
-
     /// Maximum voltage in millivolts
     max_voltage_mv: u16,
-
     /// SOC at minimum voltage (cached in tenths of percent)
     min_soc_tenth: u16,
-
     /// SOC at maximum voltage (cached in tenths of percent)
     max_soc_tenth: u16,
 }
@@ -120,7 +115,6 @@ impl Curve {
     pub const fn new(points: &[CurvePoint]) -> Self {
         let mut curve = Self::empty();
         let mut i = 0usize;
-
         let mut min = 0u16;
         let mut max = 0u16;
         let mut min_soc = 0u16;
@@ -147,18 +141,109 @@ impl Curve {
                     max_soc = p.soc_tenth;
                 }
             }
-
             i += 1;
         }
 
         curve.len = i as u8;
+
         if i > 0 {
             curve.min_voltage_mv = min;
             curve.max_voltage_mv = max;
             curve.min_soc_tenth = min_soc;
             curve.max_soc_tenth = max_soc;
         }
+
         curve
+    }
+
+    /// Converts a voltage measurement to state-of-charge (SOC) percentage
+    /// using fixed-point arithmetic
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage` - Battery voltage as fixed-point value
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(soc)` - SOC percentage (0.0 to 100.0) as fixed-point
+    /// * `Err(Error::InvalidCurve)` - Curve has fewer than 2 points
+    /// * `Err(Error::NumericalError)` - Division by zero or calculation error
+    ///
+    /// # Performance
+    ///
+    /// This method uses binary search (via `partition_point`) for O(log n) lookup
+    /// and cached SOC values for O(1) boundary checks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    /// use fixed::types::I16F16;
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(3.5, 50.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    ///
+    /// // At minimum voltage
+    /// let soc = curve.voltage_to_soc_fixed(I16F16::from_num(3.0)).unwrap();
+    /// assert_eq!(soc, I16F16::from_num(0.0));
+    ///
+    /// // At maximum voltage
+    /// let soc = curve.voltage_to_soc_fixed(I16F16::from_num(4.0)).unwrap();
+    /// assert_eq!(soc, I16F16::from_num(100.0));
+    /// ```
+    pub fn voltage_to_soc_fixed(&self, voltage: Fixed) -> Result<Fixed, Error> {
+        if self.len < 2 {
+            return Err(Error::InvalidCurve);
+        }
+
+        // Convert voltage to millivolts (as i32 for comparisons)
+        let voltage_mv = (voltage * Fixed::from_num(1000)).to_num::<i32>();
+
+        // Cache frequently used values to avoid repeated conversions
+        let max_voltage_mv = self.max_voltage_mv as i32;
+        let min_voltage_mv = self.min_voltage_mv as i32;
+        let max_soc = Fixed::from_num(self.max_soc_tenth) / Fixed::from_num(10);
+        let min_soc = Fixed::from_num(self.min_soc_tenth) / Fixed::from_num(10);
+
+        // Boundary checks - use cached SOC values for O(1) lookup
+        if voltage_mv >= max_voltage_mv {
+            return Ok(max_soc);
+        }
+
+        if voltage_mv <= min_voltage_mv {
+            return Ok(min_soc);
+        }
+
+        // Binary search for interpolation segment using Rust's partition_point
+        let points = &self.points[..self.len as usize];
+
+        // Find the index of the first point with voltage > target voltage
+        let idx = points.partition_point(|p| p.voltage_mv as i32 <= voltage_mv);
+
+        // Check if we found a valid interpolation segment
+        if idx > 0 && idx < points.len() {
+            let prev = points[idx - 1];
+            let curr = points[idx];
+
+            if voltage_mv >= prev.voltage_mv as i32 && voltage_mv <= curr.voltage_mv as i32 {
+                let prev_voltage_mv = prev.voltage_mv as i32;
+                let curr_voltage_mv = curr.voltage_mv as i32;
+
+                let range = Fixed::from_num(curr_voltage_mv - prev_voltage_mv);
+                let ratio = Fixed::from_num(voltage_mv - prev_voltage_mv) / range;
+
+                let prev_soc = prev.soc_fixed();
+                let curr_soc = curr.soc_fixed();
+
+                let soc = prev_soc + ratio * (curr_soc - prev_soc);
+                return Ok(soc);
+            }
+        }
+
+        Err(Error::NumericalError)
     }
 
     /// Converts a voltage measurement to state-of-charge (SOC) percentage
@@ -205,46 +290,9 @@ impl Curve {
     /// assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
     /// ```
     pub fn voltage_to_soc(&self, voltage: f32) -> Result<f32, Error> {
-        if self.len < 2 {
-            return Err(Error::InvalidCurve);
-        }
-
-        let voltage_mv = (voltage * 1000.0) as i32;
-
-        // Cache frequently used values to avoid repeated conversions
-        let max_voltage_mv = self.max_voltage_mv as i32;
-        let min_voltage_mv = self.min_voltage_mv as i32;
-        let max_soc = self.max_soc_tenth as f32 / 10.0;
-        let min_soc = self.min_soc_tenth as f32 / 10.0;
-
-        // Boundary checks - use cached SOC values for O(1) lookup
-        if voltage_mv >= max_voltage_mv {
-            return Ok(max_soc);
-        }
-        if voltage_mv <= min_voltage_mv {
-            return Ok(min_soc);
-        }
-
-        // Binary search for interpolation segment using Rust's partition_point
-        let points = &self.points[..self.len as usize];
-
-        // Find the index of the first point with voltage > target voltage
-        let idx = points.partition_point(|p| p.voltage_mv as i32 <= voltage_mv);
-
-        // Check if we found a valid interpolation segment
-        if idx > 0 && idx < points.len() {
-            let prev = points[idx - 1];
-            let curr = points[idx];
-
-            if voltage_mv >= prev.voltage_mv as i32 && voltage_mv <= curr.voltage_mv as i32 {
-                let range = (curr.voltage_mv as i32 - prev.voltage_mv as i32) as f32;
-                let ratio = (voltage_mv - prev.voltage_mv as i32) as f32 / range;
-                let soc = prev.soc() + ratio * (curr.soc() - prev.soc());
-                return Ok(soc);
-            }
-        }
-
-        Err(Error::NumericalError)
+        let voltage_fixed = Fixed::from_num(voltage);
+        let soc_fixed = self.voltage_to_soc_fixed(voltage_fixed)?;
+        Ok(soc_fixed.to_num::<f32>())
     }
 
     /// Returns the voltage range of the curve
@@ -272,6 +320,35 @@ impl Curve {
         (
             self.min_voltage_mv as f32 / 1000.0,
             self.max_voltage_mv as f32 / 1000.0,
+        )
+    }
+
+    /// Returns the voltage range of the curve as fixed-point values
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (minimum_voltage, maximum_voltage) as fixed-point values
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use battery_estimator::{Curve, CurvePoint};
+    /// use fixed::types::I16F16;
+    ///
+    /// let curve = Curve::new(&[
+    ///     CurvePoint::new(3.0, 0.0),
+    ///     CurvePoint::new(4.0, 100.0),
+    /// ]);
+    ///
+    /// let (min, max) = curve.voltage_range_fixed();
+    /// assert_eq!(min, I16F16::from_num(3.0));
+    /// assert_eq!(max, I16F16::from_num(4.0));
+    /// ```
+    #[inline]
+    pub fn voltage_range_fixed(&self) -> (Fixed, Fixed) {
+        (
+            Fixed::from_num(self.min_voltage_mv) / Fixed::from_num(1000),
+            Fixed::from_num(self.max_voltage_mv) / Fixed::from_num(1000),
         )
     }
 
@@ -454,6 +531,7 @@ mod tests {
     #[test]
     fn test_curve_empty() {
         let curve = Curve::empty();
+
         assert!(curve.is_empty());
         assert_eq!(curve.len(), 0);
         assert!(curve.voltage_to_soc(3.0).is_err());
@@ -492,9 +570,19 @@ mod tests {
     }
 
     #[test]
+    fn test_curve_voltage_range_fixed() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        let (min, max) = curve.voltage_range_fixed();
+        assert_eq!(min, Fixed::from_num(3.0));
+        assert_eq!(max, Fixed::from_num(4.0));
+    }
+
+    #[test]
     fn test_curve_max_points() {
         // Test that curve handles maximum number of points
         let mut points = [CurvePoint::new(0.0, 0.0); MAX_CURVE_POINTS];
+
         for (i, point) in points.iter_mut().enumerate().take(MAX_CURVE_POINTS) {
             let voltage = 3.0 + (i as f32 * 0.1);
             let soc = (i as f32 / (MAX_CURVE_POINTS - 1) as f32) * 100.0;
@@ -502,6 +590,7 @@ mod tests {
         }
 
         let curve = Curve::new(&points);
+
         assert_eq!(curve.len(), MAX_CURVE_POINTS);
 
         // Test interpolation at various points
@@ -559,20 +648,20 @@ mod tests {
             CurvePoint::new(3.3, 30.0),
         ]);
 
-        // Test precise interpolation
-        assert_eq!(curve.voltage_to_soc(3.05).unwrap(), 5.0);
-        assert_eq!(curve.voltage_to_soc(3.15).unwrap(), 15.0);
-        assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
+        // Test precise interpolation with tolerance for fixed-point precision
+        assert!((curve.voltage_to_soc(3.05).unwrap() - 5.0).abs() < 0.2);
+        assert!((curve.voltage_to_soc(3.15).unwrap() - 15.0).abs() < 0.2);
+        assert!((curve.voltage_to_soc(3.25).unwrap() - 25.0).abs() < 0.2);
     }
 
     #[test]
     fn test_curve_single_segment() {
         let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
 
-        // Single segment interpolation
-        assert_eq!(curve.voltage_to_soc(3.25).unwrap(), 25.0);
-        assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
-        assert_eq!(curve.voltage_to_soc(3.75).unwrap(), 75.0);
+        // Single segment interpolation with tolerance for fixed-point precision
+        assert!((curve.voltage_to_soc(3.25).unwrap() - 25.0).abs() < 0.2);
+        assert!((curve.voltage_to_soc(3.5).unwrap() - 50.0).abs() < 0.2);
+        assert!((curve.voltage_to_soc(3.75).unwrap() - 75.0).abs() < 0.2);
     }
 
     #[test]
@@ -584,10 +673,17 @@ mod tests {
         let curve = Curve::new(&points);
 
         // Test that interpolation works with dense points
+        // Use larger tolerance for fixed-point precision
         for i in 0..20 {
             let voltage = 3.0 + i as f32 * 0.05 + 0.025;
             let expected_soc = i as f32 * 5.0 + 2.5;
-            assert!((curve.voltage_to_soc(voltage).unwrap() - expected_soc).abs() < 0.01);
+            assert!(
+                (curve.voltage_to_soc(voltage).unwrap() - expected_soc).abs() < 0.5,
+                "Expected {} but got {} at voltage {}",
+                expected_soc,
+                curve.voltage_to_soc(voltage).unwrap(),
+                voltage
+            );
         }
     }
 
@@ -607,13 +703,75 @@ mod tests {
         let soc_41 = curve.voltage_to_soc(4.1).unwrap();
 
         assert_eq!(soc_35, 20.0);
+
         // 3.8V is between 3.5V (20%) and 4.0V (60%)
         // ratio = (3.8 - 3.5) / (4.0 - 3.5) = 0.6
         // soc = 20 + 0.6 * 40 = 44.0
         assert!((soc_38 - 44.0).abs() < 0.1);
+
         // 4.1V is between 4.0V (60%) and 4.2V (100%)
         // ratio = (4.1 - 4.0) / (4.2 - 4.0) = 0.5
         // soc = 60 + 0.5 * 40 = 80.0
         assert!((soc_41 - 80.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_voltage_to_soc_fixed() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        // Test at boundaries
+        let soc_min = curve.voltage_to_soc_fixed(Fixed::from_num(3.0)).unwrap();
+        assert_eq!(soc_min, Fixed::ZERO);
+
+        let soc_max = curve.voltage_to_soc_fixed(Fixed::from_num(4.0)).unwrap();
+        assert_eq!(soc_max, Fixed::from_num(100.0));
+
+        // Test interpolation
+        let soc_mid = curve.voltage_to_soc_fixed(Fixed::from_num(3.5)).unwrap();
+        assert_eq!(soc_mid, Fixed::from_num(50.0));
+    }
+
+    #[test]
+    fn test_voltage_to_soc_fixed_multiple_points() {
+        let curve = Curve::new(&[
+            CurvePoint::new(3.0, 0.0),
+            CurvePoint::new(3.5, 50.0),
+            CurvePoint::new(4.0, 100.0),
+        ]);
+
+        // Test at each point
+        assert_eq!(
+            curve.voltage_to_soc_fixed(Fixed::from_num(3.0)).unwrap(),
+            Fixed::ZERO
+        );
+        assert_eq!(
+            curve.voltage_to_soc_fixed(Fixed::from_num(3.5)).unwrap(),
+            Fixed::from_num(50.0)
+        );
+        assert_eq!(
+            curve.voltage_to_soc_fixed(Fixed::from_num(4.0)).unwrap(),
+            Fixed::from_num(100.0)
+        );
+
+        // Test interpolation
+        let soc_3_25 = curve.voltage_to_soc_fixed(Fixed::from_num(3.25)).unwrap();
+        assert!((soc_3_25 - Fixed::from_num(25.0)).abs() < Fixed::from_num(0.1));
+    }
+
+    #[test]
+    fn test_curve_invalid_fixed() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0)]);
+
+        // Curve with only one point should error
+        assert!(curve.voltage_to_soc_fixed(Fixed::from_num(3.5)).is_err());
+    }
+
+    #[test]
+    fn test_curve_empty_fixed() {
+        let curve = Curve::empty();
+
+        assert!(curve.is_empty());
+        assert_eq!(curve.len(), 0);
+        assert!(curve.voltage_to_soc_fixed(Fixed::from_num(3.0)).is_err());
     }
 }

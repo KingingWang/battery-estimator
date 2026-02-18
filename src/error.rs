@@ -3,7 +3,7 @@
 //! This module defines the error types that can occur during battery
 //! state-of-charge estimation operations.
 
-use thiserror::Error;
+use core::fmt;
 
 /// Errors that can occur during battery SOC estimation
 ///
@@ -24,7 +24,7 @@ use thiserror::Error;
 ///     Err(Error::InvalidTemperature) => eprintln!("Invalid temperature"),
 /// }
 /// ```
-#[derive(Error, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Error {
     /// The voltage curve data is invalid
     ///
@@ -43,9 +43,7 @@ pub enum Error {
     /// let result = invalid_curve.voltage_to_soc(3.7);
     /// assert!(matches!(result, Err(Error::InvalidCurve)));
     /// ```
-    #[error("Invalid voltage curve")]
     InvalidCurve,
-
     /// A numerical error occurred during calculation
     ///
     /// This error occurs when:
@@ -64,9 +62,7 @@ pub enum Error {
     ///     CurvePoint::new(3.7, 60.0), // Duplicate voltage!
     /// ]);
     /// ```
-    #[error("Numerical error in calculation")]
     NumericalError,
-
     /// The temperature value is invalid
     ///
     /// This error occurs when:
@@ -84,35 +80,33 @@ pub enum Error {
     /// // Invalid temperature
     /// let result = estimator.estimate_soc_with_temp(3.7, f32::NAN);
     /// ```
-    #[error("Invalid temperature")]
     InvalidTemperature,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::InvalidCurve => write!(f, "Invalid voltage curve"),
+            Error::NumericalError => write!(f, "Numerical error in calculation"),
+            Error::InvalidTemperature => write!(f, "Invalid temperature"),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::fmt::Write;
+    extern crate alloc;
+    use alloc::string::ToString;
 
     #[test]
     fn test_error_display() {
-        // In no-std, Display is available via core::fmt
-        // We can test that the Display implementation compiles and works
-        let mut buffer = [0u8; 64];
-
-        // Test InvalidCurve
-        let mut writer = BufferWriter::new(&mut buffer);
-        write!(writer, "{}", Error::InvalidCurve).unwrap();
-        assert_eq!(writer.as_str(), "Invalid voltage curve");
-
-        // Test NumericalError
-        let mut writer = BufferWriter::new(&mut buffer);
-        write!(writer, "{}", Error::NumericalError).unwrap();
-        assert_eq!(writer.as_str(), "Numerical error in calculation");
-
-        // Test InvalidTemperature
-        let mut writer = BufferWriter::new(&mut buffer);
-        write!(writer, "{}", Error::InvalidTemperature).unwrap();
-        assert_eq!(writer.as_str(), "Invalid temperature");
+        assert_eq!(Error::InvalidCurve.to_string(), "Invalid voltage curve");
+        assert_eq!(
+            Error::NumericalError.to_string(),
+            "Numerical error in calculation"
+        );
+        assert_eq!(Error::InvalidTemperature.to_string(), "Invalid temperature");
     }
 
     #[test]
@@ -120,7 +114,6 @@ mod tests {
         assert_eq!(Error::InvalidCurve, Error::InvalidCurve);
         assert_eq!(Error::NumericalError, Error::NumericalError);
         assert_eq!(Error::InvalidTemperature, Error::InvalidTemperature);
-
         assert_ne!(Error::InvalidCurve, Error::NumericalError);
     }
 
@@ -128,16 +121,15 @@ mod tests {
     fn test_error_copy() {
         let error1 = Error::InvalidCurve;
         let error2 = error1;
+
         assert_eq!(error1, error2);
     }
 
     #[test]
     fn test_error_debug() {
         let error = Error::NumericalError;
-        let mut buffer = [0u8; 64];
-        let mut writer = BufferWriter::new(&mut buffer);
-        write!(writer, "{:?}", error).unwrap();
-        assert!(writer.as_str().contains("NumericalError"));
+        let debug_str = alloc::format!("{:?}", error);
+        assert!(debug_str.contains("NumericalError"));
     }
 
     #[test]
@@ -148,6 +140,7 @@ mod tests {
             Error::NumericalError,
             Error::InvalidTemperature,
         ];
+
         assert_eq!(errors.len(), 3);
     }
 
@@ -161,33 +154,5 @@ mod tests {
         assert_ne!(error1, error2);
         assert_ne!(error2, error3);
         assert_ne!(error1, error3);
-    }
-
-    // Helper struct for testing Display in no-std
-    struct BufferWriter<'a> {
-        buffer: &'a mut [u8],
-        pos: usize,
-    }
-
-    impl<'a> BufferWriter<'a> {
-        fn new(buffer: &'a mut [u8]) -> Self {
-            BufferWriter { buffer, pos: 0 }
-        }
-
-        fn as_str(&self) -> &str {
-            core::str::from_utf8(&self.buffer[..self.pos]).unwrap()
-        }
-    }
-
-    impl<'a> core::fmt::Write for BufferWriter<'a> {
-        fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            let bytes = s.as_bytes();
-            if self.pos + bytes.len() > self.buffer.len() {
-                return Err(core::fmt::Error);
-            }
-            self.buffer[self.pos..self.pos + bytes.len()].copy_from_slice(bytes);
-            self.pos += bytes.len();
-            Ok(())
-        }
     }
 }
