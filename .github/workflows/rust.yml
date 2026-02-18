@@ -144,27 +144,27 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    
+  
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Install tarpaulin
-      run: cargo install cargo-tarpaulin
-      
-    - name: Generate coverage
-      run: cargo tarpaulin --out Xml --all-features --verbose
-      
-    - name: Upload to codecov.io
-      uses: codecov/codecov-action@v5
-      with:
-        files: ./cobertura.xml
-        flags: unittests
-        name: codecov-umbrella
-        token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+  
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+  
+      - name: Install tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+  
+      - name: Generate coverage
+        run: cargo tarpaulin --out Xml --all-features --verbose
+  
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./cobertura.xml
+          flags: unittests
+          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   # 文档构建检查
   docs:
@@ -273,7 +273,7 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: '1.85.0'
+        toolchain: '1.86.0'
       
     - name: Cache cargo
       uses: actions/cache@v4
