@@ -2,12 +2,14 @@
 //!
 //! Run with: cargo bench
 
+use std::hint::black_box;
+
 use battery_estimator::{
     compensate_aging, compensate_aging_fixed, compensate_temperature, compensate_temperature_fixed,
     default_temperature_compensation, default_temperature_compensation_fixed, BatteryChemistry,
     Curve, CurvePoint, Fixed, SocEstimator,
 };
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 // ============================================================================
 // SOC Estimation Benchmarks
