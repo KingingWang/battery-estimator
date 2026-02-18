@@ -290,6 +290,10 @@ impl Curve {
     /// assert_eq!(curve.voltage_to_soc(3.5).unwrap(), 50.0);
     /// ```
     pub fn voltage_to_soc(&self, voltage: f32) -> Result<f32, Error> {
+        // Check for NaN before conversion to avoid panic in Fixed::from_num
+        if !voltage.is_finite() {
+            return Ok(0.0);
+        }
         let voltage_fixed = Fixed::from_num(voltage);
         let soc_fixed = self.voltage_to_soc_fixed(voltage_fixed)?;
         Ok(soc_fixed.to_num::<f32>())
@@ -773,5 +777,21 @@ mod tests {
         assert!(curve.is_empty());
         assert_eq!(curve.len(), 0);
         assert!(curve.voltage_to_soc_fixed(Fixed::from_num(3.0)).is_err());
+    }
+
+    #[test]
+    fn test_voltage_to_soc_nan_handling() {
+        let curve = Curve::new(&[CurvePoint::new(3.0, 0.0), CurvePoint::new(4.0, 100.0)]);
+
+        // Test NaN handling - should return 0.0 instead of panicking
+        let result = curve.voltage_to_soc(f32::NAN).unwrap();
+        assert_eq!(result, 0.0);
+
+        // Test infinity handling
+        let result = curve.voltage_to_soc(f32::INFINITY).unwrap();
+        assert_eq!(result, 0.0);
+
+        let result = curve.voltage_to_soc(f32::NEG_INFINITY).unwrap();
+        assert_eq!(result, 0.0);
     }
 }
