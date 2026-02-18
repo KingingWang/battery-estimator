@@ -13,7 +13,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # 检查代码质量和格式
   check:
     name: Code Quality Checks
     runs-on: ubuntu-latest
@@ -53,7 +52,6 @@ jobs:
         cargo geiger --display-features --forbid-unsafe
       shell: bash
 
-  # 安全审计
   security:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -69,7 +67,6 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         deny: warnings
 
-  # 标准库环境测试
   test:
     name: Test (std)
     runs-on: ${{ matrix.os }}
@@ -106,7 +103,6 @@ jobs:
     - name: Run documentation tests
       run: cargo test --doc --verbose
 
-  # no_std 环境测试
   test-no-std:
     name: Test (no_std)
     runs-on: ubuntu-latest
@@ -140,7 +136,6 @@ jobs:
         cargo check --target thumbv7m-none-eabi --no-default-features --verbose
         cargo check --target thumbv7m-none-eabi --features default --verbose
 
-  # 代码覆盖率测试
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
@@ -166,7 +161,6 @@ jobs:
           name: codecov-umbrella
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # 文档构建检查
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -193,7 +187,6 @@ jobs:
     - name: Check documentation links
       run: cargo doc --no-deps --all-features --document-private-items
 
-  # 示例程序测试
   examples:
     name: Examples
     runs-on: ubuntu-latest
@@ -226,7 +219,6 @@ jobs:
     - name: Run temperature_compensation_test example
       run: cargo run --example temperature_compensation_test
 
-  # 基准测试
   bench:
     name: Benchmarks
     runs-on: ubuntu-latest
@@ -261,7 +253,6 @@ jobs:
           comment-on-alert: true
         continue-on-error: true
 
-  # 最低支持版本检查 (MSRV)
   msrv:
     name: Check MSRV
     runs-on: ubuntu-latest
@@ -289,7 +280,6 @@ jobs:
         cargo build --verbose
         cargo test --verbose
 
-  # 发布检查 - 在每次 push 时运行
   publish-check:
     name: Publish Check
     runs-on: ubuntu-latest
@@ -313,7 +303,6 @@ jobs:
     - name: Check publish
       run: cargo publish --dry-run
 
-  # 实际发布 - 只在推送版本标签时运行
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest
