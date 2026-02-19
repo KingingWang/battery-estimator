@@ -125,13 +125,11 @@ impl Curve {
             curve.points[i] = p;
 
             if i == 0 {
-                // First point initializes all values
                 min = p.voltage_mv;
                 max = p.voltage_mv;
                 min_soc = p.soc_tenth;
                 max_soc = p.soc_tenth;
             } else {
-                // Update min/max voltage and their corresponding SOC values
                 if p.voltage_mv < min {
                     min = p.voltage_mv;
                     min_soc = p.soc_tenth;
@@ -199,16 +197,13 @@ impl Curve {
             return Err(Error::InvalidCurve);
         }
 
-        // Convert voltage to millivolts (as i32 for comparisons)
         let voltage_mv = (voltage * Fixed::from_num(1000)).to_num::<i32>();
 
-        // Cache frequently used values to avoid repeated conversions
         let max_voltage_mv = self.max_voltage_mv as i32;
         let min_voltage_mv = self.min_voltage_mv as i32;
         let max_soc = Fixed::from_num(self.max_soc_tenth) / Fixed::from_num(10);
         let min_soc = Fixed::from_num(self.min_soc_tenth) / Fixed::from_num(10);
 
-        // Boundary checks - use cached SOC values for O(1) lookup
         if voltage_mv >= max_voltage_mv {
             return Ok(max_soc);
         }
@@ -217,13 +212,9 @@ impl Curve {
             return Ok(min_soc);
         }
 
-        // Binary search for interpolation segment using Rust's partition_point
         let points = &self.points[..self.len as usize];
-
-        // Find the index of the first point with voltage > target voltage
         let idx = points.partition_point(|p| p.voltage_mv as i32 <= voltage_mv);
 
-        // Check if we found a valid interpolation segment
         if idx > 0 && idx < points.len() {
             let prev = points[idx - 1];
             let curr = points[idx];

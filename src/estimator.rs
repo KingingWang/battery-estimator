@@ -115,7 +115,7 @@ impl SocEstimator {
 
         Self {
             curve,
-            config: EstimatorConfig::default(), // This is now a const function
+            config: EstimatorConfig::default(),
         }
     }
 
@@ -178,11 +178,7 @@ impl SocEstimator {
         temperature: Fixed,
     ) -> Result<Fixed, Error> {
         let base_soc = self.curve.voltage_to_soc_fixed(voltage)?;
-
-        // Always apply temperature compensation with default parameters
         let compensated = default_temperature_compensation_fixed(base_soc, temperature);
-
-        // Clamp to valid range
         Ok(compensated.clamp(Fixed::ZERO, Fixed::from_num(100)))
     }
 
@@ -225,6 +221,21 @@ impl SocEstimator {
     /// # Returns
     ///
     /// Compensated SOC percentage as fixed-point value
+    /// Estimate SOC with configuration-based compensation using fixed-point arithmetic
+    ///
+    /// This method applies temperature and aging compensation according to the
+    /// estimator's current configuration. Compensation is only applied if enabled
+    /// via the configuration flags.
+    ///
+    /// # Arguments
+    ///
+    /// * `voltage` - Battery voltage as fixed-point value
+    /// * `temperature` - Current battery temperature in Celsius as fixed-point
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(soc)` - Compensated SOC percentage as fixed-point value, clamped to 0-100%
+    /// * `Err(Error)` - Error if estimation fails
     pub fn estimate_soc_compensated_fixed(
         &self,
         voltage: Fixed,
@@ -243,12 +254,10 @@ impl SocEstimator {
             );
         }
 
-        // Apply aging compensation if enabled
         if self.config.is_aging_compensation_enabled() {
             soc = compensate_aging_fixed(soc, self.config.age_years, self.config.aging_factor);
         }
 
-        // Ensure SOC is within valid range
         Ok(soc.clamp(Fixed::ZERO, Fixed::from_num(100)))
     }
 
