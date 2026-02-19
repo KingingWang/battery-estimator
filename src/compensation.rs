@@ -70,14 +70,9 @@ pub fn compensate_temperature_fixed(
 ) -> Fixed {
     let delta_temp = temperature - nominal_temp;
 
-    // Calculate capacity factor based on temperature difference
-    // Below nominal: capacity decreases (factor < 1.0)
-    // Above nominal: capacity increases slightly (factor > 1.0, but capped)
     let capacity_change = if delta_temp < Fixed::ZERO {
-        // Cold: reduce capacity (more aggressive effect)
         delta_temp * coefficient
     } else {
-        // Warm: slight capacity increase (less aggressive, capped at 5%)
         let change = delta_temp * coefficient / Fixed::from_num(2);
         if change > Fixed::from_num(0.05) {
             Fixed::from_num(0.05)
@@ -86,9 +81,6 @@ pub fn compensate_temperature_fixed(
         }
     };
 
-    // Apply compensation: cold reduces SOC, warm increases SOC slightly
-    // Bound the total compensation to reasonable limits (-30% to +5%)
-    // Note: warm compensation is already capped at +5% above, so only need to check cold limit
     let bounded_change = if capacity_change < Fixed::from_num(-0.30) {
         Fixed::from_num(-0.30)
     } else {
@@ -136,19 +128,16 @@ pub fn compensate_temperature_fixed(
 /// ```
 #[inline]
 pub fn compensate_aging_fixed(soc: Fixed, age_years: Fixed, aging_factor: Fixed) -> Fixed {
-    // Negative age doesn't make sense, treat as no aging
     if age_years < Fixed::ZERO {
         return soc;
     }
 
-    // Negative aging factor doesn't make sense, treat as no aging
     if aging_factor < Fixed::ZERO {
         return soc;
     }
 
     let age_compensation = age_years * aging_factor;
 
-    // Clamp to max 50% compensation
     let clamped = if age_compensation > Fixed::from_num(0.5) {
         Fixed::from_num(0.5)
     } else {
@@ -189,14 +178,14 @@ pub fn compensate_aging_fixed(soc: Fixed, age_years: Fixed, aging_factor: Fixed)
 /// ```
 #[inline]
 pub fn default_temperature_compensation_fixed(soc: Fixed, temperature: Fixed) -> Fixed {
-    const NOMINAL_TEMP: Fixed = Fixed::from_bits(25 << 16); // 25.0 in 16.16 format
-    const COEFFICIENT: Fixed = Fixed::from_bits(328); // 0.005 in 16.16 format (approximately)
+    const NOMINAL_TEMP: Fixed = Fixed::from_bits(25 << 16);
+    const COEFFICIENT: Fixed = Fixed::from_bits(328);
 
     compensate_temperature_fixed(soc, temperature, NOMINAL_TEMP, COEFFICIENT)
 }
 
 // ============================================================================
-// Legacy floating-point API for backward compatibility
+// Legacy floating-point API
 // ============================================================================
 
 /// Applies temperature compensation to SOC value (floating-point API)
@@ -256,7 +245,6 @@ pub fn compensate_temperature(
     nominal_temp: f32,
     coefficient: f32,
 ) -> f32 {
-    // Validate inputs - return original SOC if invalid
     if !soc.is_finite()
         || !temperature.is_finite()
         || !nominal_temp.is_finite()
@@ -310,17 +298,14 @@ pub fn compensate_temperature(
 /// ```
 #[inline]
 pub fn compensate_aging(soc: f32, age_years: f32, aging_factor: f32) -> f32 {
-    // Validate inputs - return original SOC if invalid
     if !soc.is_finite() || !age_years.is_finite() || !aging_factor.is_finite() {
         return soc;
     }
 
-    // Negative age doesn't make sense, treat as no aging
     if age_years < 0.0 {
         return soc;
     }
 
-    // Negative aging factor doesn't make sense, treat as no aging
     if aging_factor < 0.0 {
         return soc;
     }
